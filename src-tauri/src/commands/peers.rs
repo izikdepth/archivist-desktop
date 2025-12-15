@@ -6,7 +6,7 @@ use crate::services::peers::{PeerInfo, PeerList};
 #[tauri::command]
 pub async fn get_peers(state: State<'_, AppState>) -> Result<PeerList> {
     let peers = state.peers.read().await;
-    Ok(peers.get_peers())
+    peers.get_peers().await
 }
 
 #[tauri::command]

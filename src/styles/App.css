@@ -649,3 +649,153 @@ tr:hover td {
 .recent-uploads li:last-child {
   border-bottom: none;
 }
+
+/* Peers page */
+.local-node-info {
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.local-node-info h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: var(--spacing-md);
+}
+
+.local-node-info .label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.node-id {
+  margin-bottom: var(--spacing-md);
+}
+
+.node-id code {
+  display: block;
+  margin-top: var(--spacing-xs);
+  font-family: monospace;
+  font-size: 0.75rem;
+  background-color: var(--color-bg-tertiary);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+}
+
+.node-addresses {
+  margin-bottom: var(--spacing-md);
+}
+
+.node-addresses ul {
+  list-style: none;
+  margin-top: var(--spacing-xs);
+}
+
+.node-addresses li {
+  margin-bottom: var(--spacing-xs);
+}
+
+.node-addresses code {
+  font-family: monospace;
+  font-size: 0.75rem;
+  background-color: var(--color-bg-tertiary);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+}
+
+.spr-section {
+  margin-top: var(--spacing-md);
+}
+
+.spr-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-xs);
+}
+
+.spr-container code.spr {
+  flex: 1;
+  font-family: monospace;
+  font-size: 0.75rem;
+  background-color: var(--color-bg-tertiary);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.peer-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.stat-card.small {
+  padding: var(--spacing-md);
+}
+
+.stat-card.small h4 {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.stat-card .stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.peer-item.connected {
+  border-left: 3px solid var(--color-success);
+}
+
+.peer-item.offline {
+  border-left: 3px solid var(--color-text-muted);
+  opacity: 0.7;
+}
+
+.peer-id-display {
+  font-family: monospace;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.peer-addresses {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-left: var(--spacing-sm);
+}
+
+.peer-latency {
+  font-size: 0.75rem;
+  color: var(--color-success);
+  margin-left: var(--spacing-sm);
+}
+
+.peer-status.offline {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-left: var(--spacing-sm);
+}
+
+.peer-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+@media (max-width: 768px) {
+  .peer-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

@@ -1,82 +1,99 @@
-import { useState, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-
-interface PeerInfo {
-  peerId: string;
-  addresses: string[];
-  connected: boolean;
-  nickname?: string;
-}
+import { useState } from 'react';
+import { usePeers } from '../hooks/usePeers';
 
 function Peers() {
-  const [peers, setPeers] = useState<PeerInfo[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [connectInput, setConnectInput] = useState('');
+  const {
+    peerList,
+    loading,
+    error,
+    connectPeer,
+    disconnectPeer,
+    removePeer,
+    copySpr,
+    refreshPeers,
+  } = usePeers();
 
-  const loadPeers = useCallback(async () => {
-    try {
-      setLoading(true);
-      const result = await invoke<PeerInfo[]>('list_peers');
-      setPeers(result);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load peers');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [connectInput, setConnectInput] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const handleConnect = async () => {
     if (!connectInput.trim()) return;
 
     try {
-      setLoading(true);
-      await invoke('connect_peer', { address: connectInput.trim() });
+      await connectPeer(connectInput.trim());
       setConnectInput('');
-      await loadPeers();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to connect to peer');
-    } finally {
-      setLoading(false);
+    } catch {
+      // Error is handled by the hook
     }
   };
 
-  const handleDisconnect = async (peerId: string) => {
-    try {
-      await invoke('disconnect_peer', { peerId });
-      await loadPeers();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to disconnect peer');
-    }
+  const handleCopySpr = async () => {
+    await copySpr();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
-  useEffect(() => {
-    loadPeers();
-    const interval = setInterval(loadPeers, 10000);
-    return () => clearInterval(interval);
-  }, [loadPeers]);
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
 
-  const connectedPeers = peers.filter((p) => p.connected);
-  const knownPeers = peers.filter((p) => !p.connected);
+  const connectedPeers = peerList.peers.filter((p) => p.connected);
+  const savedPeers = peerList.peers.filter((p) => !p.connected);
 
   return (
     <div className="page">
       <div className="page-header">
         <h2>Peers</h2>
-        <button onClick={loadPeers} disabled={loading}>
+        <button onClick={refreshPeers} disabled={loading}>
           Refresh
         </button>
       </div>
 
       {error && <div className="error-banner">{error}</div>}
 
+      {/* Local Node Info */}
+      {peerList.localPeerId && (
+        <div className="local-node-info">
+          <h3>Your Node</h3>
+          <div className="node-id">
+            <span className="label">Peer ID:</span>
+            <code>{peerList.localPeerId}</code>
+          </div>
+          {peerList.localAddresses.length > 0 && (
+            <div className="node-addresses">
+              <span className="label">Addresses:</span>
+              <ul>
+                {peerList.localAddresses.map((addr, i) => (
+                  <li key={i}><code>{addr}</code></li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {peerList.spr && (
+            <div className="spr-section">
+              <span className="label">Share your SPR:</span>
+              <div className="spr-container">
+                <code className="spr">{peerList.spr.slice(0, 60)}...</code>
+                <button className="small" onClick={handleCopySpr}>
+                  {copied ? 'Copied!' : 'Copy SPR'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Connect to Peer */}
       <div className="connect-peer">
         <h3>Connect to Peer</h3>
         <div className="input-group">
           <input
             type="text"
-            placeholder="Enter multiaddr or SPR (e.g., /ip4/1.2.3.4/tcp/9000/p2p/...)"
+            placeholder="Enter multiaddr (e.g., /ip4/1.2.3.4/tcp/9000/p2p/...)"
             value={connectInput}
             onChange={(e) => setConnectInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
@@ -87,48 +104,90 @@ function Peers() {
         </div>
       </div>
 
+      {/* Stats */}
+      <div className="peer-stats-grid">
+        <div className="stat-card small">
+          <h4>Connected</h4>
+          <div className="stat-value">{peerList.stats.connectedPeers}</div>
+        </div>
+        <div className="stat-card small">
+          <h4>Total Known</h4>
+          <div className="stat-value">{peerList.stats.totalPeers}</div>
+        </div>
+        <div className="stat-card small">
+          <h4>Sent</h4>
+          <div className="stat-value">{formatBytes(peerList.stats.bytesSentTotal)}</div>
+        </div>
+        <div className="stat-card small">
+          <h4>Received</h4>
+          <div className="stat-value">{formatBytes(peerList.stats.bytesReceivedTotal)}</div>
+        </div>
+      </div>
+
+      {/* Connected Peers */}
       <div className="peers-section">
         <h3>Connected Peers ({connectedPeers.length})</h3>
         {connectedPeers.length === 0 ? (
           <div className="empty-state">
             <p>No peers connected.</p>
-            <p>Share your node's address with friends to connect.</p>
+            <p>Share your SPR with friends or enter their address to connect.</p>
           </div>
         ) : (
           <ul className="peer-list">
             {connectedPeers.map((peer) => (
-              <li key={peer.peerId} className="peer-item connected">
+              <li key={peer.id} className="peer-item connected">
                 <div className="peer-info">
-                  <span className="peer-id">
-                    {peer.nickname || peer.peerId.slice(0, 16) + '...'}
+                  <span className="peer-id-display">
+                    {peer.id.slice(0, 16)}...{peer.id.slice(-8)}
                   </span>
                   <span className="peer-addresses">
-                    {peer.addresses.length} addresses
+                    {peer.addresses.length} address{peer.addresses.length !== 1 ? 'es' : ''}
                   </span>
+                  {peer.latencyMs && (
+                    <span className="peer-latency">{peer.latencyMs}ms</span>
+                  )}
                 </div>
-                <button
-                  className="small danger"
-                  onClick={() => handleDisconnect(peer.peerId)}
-                >
-                  Disconnect
-                </button>
+                <div className="peer-actions">
+                  <button
+                    className="small danger"
+                    onClick={() => disconnectPeer(peer.id)}
+                  >
+                    Disconnect
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
         )}
       </div>
 
-      {knownPeers.length > 0 && (
+      {/* Saved/Known Peers */}
+      {savedPeers.length > 0 && (
         <div className="peers-section">
-          <h3>Known Peers ({knownPeers.length})</h3>
+          <h3>Saved Peers ({savedPeers.length})</h3>
           <ul className="peer-list">
-            {knownPeers.map((peer) => (
-              <li key={peer.peerId} className="peer-item offline">
+            {savedPeers.map((peer) => (
+              <li key={peer.id} className="peer-item offline">
                 <div className="peer-info">
-                  <span className="peer-id">
-                    {peer.nickname || peer.peerId.slice(0, 16) + '...'}
+                  <span className="peer-id-display">
+                    {peer.id.slice(0, 16)}...{peer.id.slice(-8)}
                   </span>
-                  <span className="peer-status">Offline</span>
+                  <span className="peer-status offline">Offline</span>
+                </div>
+                <div className="peer-actions">
+                  <button
+                    className="small"
+                    onClick={() => connectPeer(peer.addresses[0] || peer.id)}
+                    disabled={peer.addresses.length === 0}
+                  >
+                    Reconnect
+                  </button>
+                  <button
+                    className="small danger"
+                    onClick={() => removePeer(peer.id)}
+                  >
+                    Remove
+                  </button>
                 </div>
               </li>
             ))}
