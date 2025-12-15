@@ -27,9 +27,10 @@ npm-debug.log*
 pnpm-debug.log*
 
 # Sidecar binaries (download separately)
-sidecars/*.exe
-sidecars/archivist-*
-!sidecars/README.md
+src-tauri/sidecars/*.exe
+src-tauri/sidecars/archivist-*
+!src-tauri/sidecars/README.md
+!src-tauri/sidecars/.gitkeep
 
 # Lock files (optional - some prefer to commit these)
 # pnpm-lock.yaml

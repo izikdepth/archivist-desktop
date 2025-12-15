@@ -12,6 +12,9 @@ pub enum ArchivistError {
     #[error("Failed to start node: {0}")]
     NodeStartFailed(String),
 
+    #[error("Failed to stop node: {0}")]
+    NodeStopFailed(String),
+
     #[error("File not found: {0}")]
     FileNotFound(String),
 

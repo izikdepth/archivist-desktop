@@ -216,6 +216,16 @@ input[type="checkbox"] {
   color: var(--color-text-secondary);
 }
 
+.status-indicator.error {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: var(--color-error);
+}
+
+.status-indicator.transitioning {
+  background-color: rgba(251, 191, 36, 0.2);
+  color: var(--color-warning);
+}
+
 /* Big numbers */
 .big-number {
   font-size: 2.5rem;
@@ -478,6 +488,51 @@ tr:hover td {
 /* Node controls */
 .node-controls {
   margin-top: var(--spacing-md);
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.node-controls button.secondary {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.node-controls button.secondary:hover:not(:disabled) {
+  background-color: var(--color-bg-secondary);
+}
+
+.restart-count {
+  font-size: 0.75rem;
+  color: var(--color-warning);
+}
+
+.last-error {
+  font-size: 0.75rem;
+  color: var(--color-error);
+  word-break: break-word;
+}
+
+.api-info {
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.api-info h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: var(--spacing-sm);
+}
+
+.api-info code {
+  font-family: monospace;
+  font-size: 0.875rem;
+  background-color: var(--color-bg-tertiary);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
 }
 
 .peer-id {

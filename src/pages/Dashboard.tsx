@@ -1,16 +1,66 @@
-import { useNode } from '../hooks/useNode';
+import { useNode, NodeState } from '../hooks/useNode';
 import { useSync } from '../hooks/useSync';
 
 function Dashboard() {
-  const { status, loading, error, startNode, stopNode } = useNode();
+  const {
+    status,
+    loading,
+    error,
+    startNode,
+    stopNode,
+    restartNode,
+    formatUptime,
+    formatBytes,
+    isRunning,
+    isStopped,
+    isError,
+    isTransitioning,
+  } = useNode();
   const { syncStatus } = useSync();
 
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  const getStateLabel = (state: NodeState): string => {
+    switch (state) {
+      case 'stopped': return 'Stopped';
+      case 'starting': return 'Starting...';
+      case 'running': return 'Running';
+      case 'stopping': return 'Stopping...';
+      case 'error': return 'Error';
+      default: return state;
+    }
+  };
+
+  const getStateClass = (state: NodeState): string => {
+    switch (state) {
+      case 'running': return 'running';
+      case 'error': return 'error';
+      case 'starting':
+      case 'stopping': return 'transitioning';
+      default: return 'stopped';
+    }
+  };
+
+  const handleStart = async () => {
+    try {
+      await startNode();
+    } catch (e) {
+      // Error is already handled by the hook
+    }
+  };
+
+  const handleStop = async () => {
+    try {
+      await stopNode();
+    } catch (e) {
+      // Error is already handled by the hook
+    }
+  };
+
+  const handleRestart = async () => {
+    try {
+      await restartNode();
+    } catch (e) {
+      // Error is already handled by the hook
+    }
   };
 
   return (
@@ -22,19 +72,37 @@ function Dashboard() {
       <div className="stats-grid">
         <div className="stat-card">
           <h3>Node Status</h3>
-          <div className={`status-indicator ${status.running ? 'running' : 'stopped'}`}>
-            {status.running ? 'Running' : 'Stopped'}
+          <div className={`status-indicator ${getStateClass(status.state)}`}>
+            {getStateLabel(status.state)}
           </div>
+          {status.pid && <p>PID: {status.pid}</p>}
           {status.version && <p>Version: {status.version}</p>}
-          {status.peerId && <p className="peer-id">Peer ID: {status.peerId.slice(0, 16)}...</p>}
+          {isRunning && status.uptimeSeconds !== undefined && (
+            <p>Uptime: {formatUptime(status.uptimeSeconds)}</p>
+          )}
+          {status.restartCount > 0 && (
+            <p className="restart-count">Restarts: {status.restartCount}</p>
+          )}
+          {status.lastError && (
+            <p className="last-error">Last error: {status.lastError}</p>
+          )}
           <div className="node-controls">
-            {status.running ? (
-              <button onClick={stopNode} disabled={loading}>
-                Stop Node
+            {isStopped || isError ? (
+              <button onClick={handleStart} disabled={loading || isTransitioning}>
+                {loading ? 'Starting...' : 'Start Node'}
               </button>
+            ) : isRunning ? (
+              <>
+                <button onClick={handleStop} disabled={loading || isTransitioning}>
+                  {loading ? 'Stopping...' : 'Stop'}
+                </button>
+                <button onClick={handleRestart} disabled={loading || isTransitioning} className="secondary">
+                  Restart
+                </button>
+              </>
             ) : (
-              <button onClick={startNode} disabled={loading}>
-                Start Node
+              <button disabled>
+                {getStateLabel(status.state)}
               </button>
             )}
           </div>
@@ -42,7 +110,7 @@ function Dashboard() {
 
         <div className="stat-card">
           <h3>Connected Peers</h3>
-          <div className="big-number">{status.peers}</div>
+          <div className="big-number">{status.peerCount}</div>
           <p>Active connections</p>
         </div>
 
@@ -52,14 +120,14 @@ function Dashboard() {
             <div
               className="storage-used"
               style={{
-                width: `${status.storage.available > 0
-                  ? (status.storage.used / status.storage.available) * 100
+                width: `${status.storageAvailableBytes > 0
+                  ? (status.storageUsedBytes / status.storageAvailableBytes) * 100
                   : 0}%`,
               }}
             />
           </div>
           <p>
-            {formatBytes(status.storage.used)} / {formatBytes(status.storage.available)}
+            {formatBytes(status.storageUsedBytes)} / {formatBytes(status.storageAvailableBytes)}
           </p>
         </div>
 
@@ -72,6 +140,13 @@ function Dashboard() {
           <p>{syncStatus.watchedFolders.length} watched folders</p>
         </div>
       </div>
+
+      {status.apiUrl && (
+        <div className="api-info">
+          <h3>Node API</h3>
+          <p><code>{status.apiUrl}</code></p>
+        </div>
+      )}
 
       {syncStatus.recentUploads.length > 0 && (
         <div className="recent-activity">

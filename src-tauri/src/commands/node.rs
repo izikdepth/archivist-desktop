@@ -1,12 +1,15 @@
-use tauri::State;
+use tauri::{AppHandle, State};
 use crate::error::Result;
 use crate::state::AppState;
 use crate::services::node::{NodeStatus, NodeConfig};
 
 #[tauri::command]
-pub async fn start_node(state: State<'_, AppState>) -> Result<NodeStatus> {
+pub async fn start_node(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<NodeStatus> {
     let mut node = state.node.write().await;
-    node.start().await?;
+    node.start(&app_handle).await?;
     Ok(node.get_status())
 }
 
@@ -14,6 +17,16 @@ pub async fn start_node(state: State<'_, AppState>) -> Result<NodeStatus> {
 pub async fn stop_node(state: State<'_, AppState>) -> Result<NodeStatus> {
     let mut node = state.node.write().await;
     node.stop().await?;
+    Ok(node.get_status())
+}
+
+#[tauri::command]
+pub async fn restart_node(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<NodeStatus> {
+    let mut node = state.node.write().await;
+    node.restart(&app_handle).await?;
     Ok(node.get_status())
 }
 
@@ -34,4 +47,10 @@ pub async fn set_node_config(state: State<'_, AppState>, config: NodeConfig) -> 
     let mut node = state.node.write().await;
     node.set_config(config);
     Ok(())
+}
+
+#[tauri::command]
+pub async fn health_check_node(state: State<'_, AppState>) -> Result<bool> {
+    let mut node = state.node.write().await;
+    node.health_check().await
 }
