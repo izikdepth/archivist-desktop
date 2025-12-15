@@ -28,14 +28,28 @@ A cross-platform desktop application for decentralized file storage, built with 
 ### Setup
 
 ```bash
-# Install dependencies
+# Quick setup (install deps + download sidecar binary)
+pnpm setup
+
+# Or step by step:
 pnpm install
+pnpm download-sidecar  # Downloads archivist-node for your platform
 
 # Run in development mode
 pnpm tauri dev
 
 # Build for production
 pnpm tauri build
+```
+
+### Cross-Platform Builds
+
+To download sidecar binaries for other platforms (cross-compilation):
+
+```bash
+bash scripts/download-sidecar.sh x86_64-apple-darwin      # macOS Intel
+bash scripts/download-sidecar.sh aarch64-apple-darwin     # macOS Apple Silicon
+bash scripts/download-sidecar.sh x86_64-pc-windows-msvc   # Windows
 ```
 
 ### Project Structure
