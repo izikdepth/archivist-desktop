@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+src-tauri/target/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Sidecar binaries (download separately)
+sidecars/*.exe
+sidecars/archivist-*
+!sidecars/README.md
+
+# Lock files (optional - some prefer to commit these)
+# pnpm-lock.yaml
+# Cargo.lock

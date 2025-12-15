@@ -1,0 +1,72 @@
+[package]
+name = "archivist-desktop"
+version = "0.1.0"
+description = "Archivist - Decentralized File Storage Desktop Client"
+authors = ["BasedMint"]
+license = "MIT"
+repository = "https://github.com/basedmint/archivist-desktop"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "archivist_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+default = []
+# V2 Marketplace features - disabled by default
+marketplace = ["ethers", "alloy"]
+zk-proofs = []
+
+[build-dependencies]
+tauri-build = { version = "2.5.3", features = ["codegen"] }
+
+[dependencies]
+# Tauri
+tauri = { version = "2.9.5", features = [] }
+tauri-plugin-log = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-process = "2"
+tauri-plugin-notification = "2"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# File system utilities
+notify = "6.1"
+dirs = "5.0"
+mime_guess = "2.0"
+
+# Networking
+reqwest = { version = "0.12", features = ["json"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# UUID generation
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Configuration
+config = "0.14"
+toml = "0.8"
+
+# V2 Marketplace dependencies (optional)
+ethers = { version = "2.0", optional = true }
+alloy = { version = "0.1", optional = true }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-single-instance = "2"

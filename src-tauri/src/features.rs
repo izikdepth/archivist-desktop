@@ -1,0 +1,41 @@
+use serde::{Deserialize, Serialize};
+
+/// Runtime feature flags that can be queried by the frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Features {
+    /// Marketplace features (wallet, contracts, listings)
+    pub marketplace: bool,
+    /// Zero-knowledge proof verification
+    pub zk_proofs: bool,
+    /// Advanced analytics dashboard
+    pub analytics: bool,
+}
+
+impl Default for Features {
+    fn default() -> Self {
+        Self {
+            // Compile-time feature detection
+            marketplace: cfg!(feature = "marketplace"),
+            zk_proofs: cfg!(feature = "zk-proofs"),
+            // Runtime features (can be enabled via config)
+            analytics: false,
+        }
+    }
+}
+
+impl Features {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Check if any V2 features are enabled
+    pub fn has_v2_features(&self) -> bool {
+        self.marketplace || self.zk_proofs
+    }
+}
+
+/// Get current feature flags
+#[tauri::command]
+pub fn get_features() -> Features {
+    Features::new()
+}
