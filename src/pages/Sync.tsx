@@ -3,12 +3,14 @@ import { open } from '@tauri-apps/plugin-dialog';
 
 function Sync() {
   const {
-    syncStatus,
+    syncState,
     loading,
     error,
     addWatchFolder,
     removeWatchFolder,
     toggleWatchFolder,
+    syncNow,
+    pauseSync,
   } = useSync();
 
   const handleAddFolder = async () => {
@@ -26,6 +28,48 @@ function Sync() {
     }
   };
 
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return 'Never';
+    try {
+      return new Date(dateStr).toLocaleString();
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'idle': return 'Idle';
+      case 'scanning': return 'Scanning...';
+      case 'syncing': return 'Syncing...';
+      case 'error': return 'Error';
+      case 'paused': return 'Paused';
+      default: return status;
+    }
+  };
+
+  const getStatusClass = (status: string) => {
+    switch (status) {
+      case 'syncing':
+      case 'scanning':
+        return 'syncing';
+      case 'error':
+        return 'error';
+      case 'paused':
+        return 'stopped';
+      default:
+        return 'idle';
+    }
+  };
+
   return (
     <div className="page">
       <div className="page-header">
@@ -34,6 +78,15 @@ function Sync() {
           <button onClick={handleAddFolder} disabled={loading}>
             Add Watch Folder
           </button>
+          {syncState.isSyncing ? (
+            <button onClick={pauseSync} disabled={loading} className="danger">
+              Pause Sync
+            </button>
+          ) : (
+            <button onClick={syncNow} disabled={loading || syncState.folders.length === 0}>
+              Sync Now
+            </button>
+          )}
         </div>
       </div>
 
@@ -41,34 +94,49 @@ function Sync() {
 
       <div className="sync-status-card">
         <h3>Sync Status</h3>
-        <div className={`status-indicator ${syncStatus.syncing ? 'syncing' : 'idle'}`}>
-          {syncStatus.syncing ? 'Syncing...' : 'Idle'}
+        <div className={`status-indicator ${syncState.isSyncing ? 'syncing' : 'idle'}`}>
+          {syncState.isSyncing ? 'Syncing...' : 'Idle'}
         </div>
-        {syncStatus.queueSize > 0 && (
-          <p>{syncStatus.queueSize} files waiting to upload</p>
-        )}
+        <div className="sync-stats">
+          <span>{syncState.syncedFiles} / {syncState.totalFiles} files synced</span>
+          {syncState.queueSize > 0 && (
+            <span className="queue-size">{syncState.queueSize} files in queue</span>
+          )}
+        </div>
       </div>
+
+      {syncState.recentUploads.length > 0 && (
+        <div className="recent-uploads">
+          <h3>Recent Uploads</h3>
+          <ul>
+            {syncState.recentUploads.map((filename, idx) => (
+              <li key={idx}>{filename}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="watched-folders">
         <h3>Watched Folders</h3>
-        {syncStatus.watchedFolders.length === 0 ? (
+        {syncState.folders.length === 0 ? (
           <div className="empty-state">
             <p>No folders being watched.</p>
             <p>Add a folder to automatically sync its contents to the network.</p>
           </div>
         ) : (
           <ul className="folder-list">
-            {syncStatus.watchedFolders.map((folder) => (
-              <li key={folder.path} className="folder-item">
+            {syncState.folders.map((folder) => (
+              <li key={folder.id} className="folder-item">
                 <div className="folder-info">
                   <span className="folder-path">{folder.path}</span>
                   <span className="folder-stats">
-                    {folder.fileCount} files
-                    {folder.lastScan && (
-                      <span className="last-scan">
-                        Last scan: {new Date(folder.lastScan).toLocaleTimeString()}
-                      </span>
-                    )}
+                    {folder.fileCount} files ({formatBytes(folder.totalSizeBytes)})
+                    <span className={`folder-status ${getStatusClass(folder.status)}`}>
+                      {getStatusLabel(folder.status)}
+                    </span>
+                  </span>
+                  <span className="last-sync">
+                    Last synced: {formatDate(folder.lastSynced)}
                   </span>
                 </div>
                 <div className="folder-actions">
@@ -76,7 +144,7 @@ function Sync() {
                     <input
                       type="checkbox"
                       checked={folder.enabled}
-                      onChange={(e) => toggleWatchFolder(folder.path, e.target.checked)}
+                      onChange={(e) => toggleWatchFolder(folder.id, e.target.checked)}
                     />
                     <span className="toggle-label">
                       {folder.enabled ? 'Enabled' : 'Disabled'}
@@ -84,7 +152,7 @@ function Sync() {
                   </label>
                   <button
                     className="small danger"
-                    onClick={() => removeWatchFolder(folder.path)}
+                    onClick={() => removeWatchFolder(folder.id)}
                   >
                     Remove
                   </button>
@@ -99,10 +167,13 @@ function Sync() {
         <h3>How Sync Works</h3>
         <ol>
           <li>Add folders you want to keep synced</li>
-          <li>Files are automatically uploaded to your local node</li>
-          <li>CIDs are announced to connected peers</li>
-          <li>Paired peers can request and download your files</li>
+          <li>Files are automatically uploaded to your local node when created or modified</li>
+          <li>CIDs are generated for each file and stored locally</li>
+          <li>Connected peers can request and download your files</li>
         </ol>
+        <p className="hint">
+          Hidden files (starting with .) and temporary files (.tmp, ~) are automatically ignored.
+        </p>
       </div>
     </div>
   );

@@ -7,12 +7,14 @@ mod state;
 
 use state::AppState;
 use services::node::NodeManager;
+use services::sync::SyncManager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Create shared app state
     let app_state = AppState::new();
     let node_service = app_state.node.clone();
+    let sync_service = app_state.sync.clone();
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::default()
@@ -99,6 +101,12 @@ pub fn run() {
                         log::error!("Auto-start failed: {}", e);
                     }
                 }
+            });
+
+            // Start the sync manager for file watching
+            let sync_manager = SyncManager::new(sync_service.clone());
+            tauri::async_runtime::spawn(async move {
+                sync_manager.start_processing().await;
             });
 
             Ok(())

@@ -2,67 +2,105 @@ import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 export interface WatchedFolder {
+  id: string;
   path: string;
   enabled: boolean;
   fileCount: number;
-  lastScan?: string;
+  totalSizeBytes: number;
+  lastSynced: string | null;
+  status: 'idle' | 'scanning' | 'syncing' | 'error' | 'paused';
 }
 
-export interface SyncStatus {
-  syncing: boolean;
+export interface SyncState {
+  folders: WatchedFolder[];
+  isSyncing: boolean;
   queueSize: number;
-  watchedFolders: WatchedFolder[];
+  totalFiles: number;
+  syncedFiles: number;
   recentUploads: string[];
 }
 
-const defaultSyncStatus: SyncStatus = {
-  syncing: false,
+const defaultSyncState: SyncState = {
+  folders: [],
+  isSyncing: false,
   queueSize: 0,
-  watchedFolders: [],
+  totalFiles: 0,
+  syncedFiles: 0,
   recentUploads: [],
 };
 
 export function useSync() {
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>(defaultSyncStatus);
+  const [syncState, setSyncState] = useState<SyncState>(defaultSyncState);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refreshStatus = useCallback(async () => {
     try {
-      const result = await invoke<SyncStatus>('sync_status');
-      setSyncStatus(result);
+      const result = await invoke<SyncState>('get_sync_status');
+      setSyncState(result);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to get sync status');
+      const msg = typeof e === 'string' ? e : (e instanceof Error ? e.message : 'Failed to get sync status');
+      setError(msg);
     }
   }, []);
 
   const addWatchFolder = useCallback(async (path: string) => {
     try {
+      setError(null);
       await invoke('add_watch_folder', { path });
       await refreshStatus();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add watch folder');
+      const msg = typeof e === 'string' ? e : (e instanceof Error ? e.message : 'Failed to add watch folder');
+      setError(msg);
       throw e;
     }
   }, [refreshStatus]);
 
-  const removeWatchFolder = useCallback(async (path: string) => {
+  const removeWatchFolder = useCallback(async (folderId: string) => {
     try {
-      await invoke('remove_watch_folder', { path });
+      setError(null);
+      await invoke('remove_watch_folder', { folderId });
       await refreshStatus();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to remove watch folder');
+      const msg = typeof e === 'string' ? e : (e instanceof Error ? e.message : 'Failed to remove watch folder');
+      setError(msg);
       throw e;
     }
   }, [refreshStatus]);
 
-  const toggleWatchFolder = useCallback(async (path: string, enabled: boolean) => {
+  const toggleWatchFolder = useCallback(async (folderId: string, enabled: boolean) => {
     try {
-      await invoke('toggle_watch_folder', { path, enabled });
+      setError(null);
+      await invoke('toggle_watch_folder', { folderId, enabled });
       await refreshStatus();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to toggle watch folder');
+      const msg = typeof e === 'string' ? e : (e instanceof Error ? e.message : 'Failed to toggle watch folder');
+      setError(msg);
+      throw e;
+    }
+  }, [refreshStatus]);
+
+  const syncNow = useCallback(async () => {
+    try {
+      setError(null);
+      await invoke('sync_now');
+      await refreshStatus();
+    } catch (e) {
+      const msg = typeof e === 'string' ? e : (e instanceof Error ? e.message : 'Failed to start sync');
+      setError(msg);
+      throw e;
+    }
+  }, [refreshStatus]);
+
+  const pauseSync = useCallback(async () => {
+    try {
+      setError(null);
+      await invoke('pause_sync');
+      await refreshStatus();
+    } catch (e) {
+      const msg = typeof e === 'string' ? e : (e instanceof Error ? e.message : 'Failed to pause sync');
+      setError(msg);
       throw e;
     }
   }, [refreshStatus]);
@@ -75,17 +113,20 @@ export function useSync() {
     }
     init();
 
+    // Poll for updates every 3 seconds
     const interval = setInterval(refreshStatus, 3000);
     return () => clearInterval(interval);
   }, [refreshStatus]);
 
   return {
-    syncStatus,
+    syncState,
     loading,
     error,
     addWatchFolder,
     removeWatchFolder,
     toggleWatchFolder,
+    syncNow,
+    pauseSync,
     refreshStatus,
   };
 }

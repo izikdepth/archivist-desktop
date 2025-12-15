@@ -16,7 +16,7 @@ function Dashboard() {
     isError,
     isTransitioning,
   } = useNode();
-  const { syncStatus } = useSync();
+  const { syncState } = useSync();
 
   const getStateLabel = (state: NodeState): string => {
     switch (state) {
@@ -133,11 +133,11 @@ function Dashboard() {
 
         <div className="stat-card">
           <h3>Sync Status</h3>
-          <div className={`status-indicator ${syncStatus.syncing ? 'syncing' : 'idle'}`}>
-            {syncStatus.syncing ? 'Syncing' : 'Idle'}
+          <div className={`status-indicator ${syncState.isSyncing ? 'syncing' : 'idle'}`}>
+            {syncState.isSyncing ? 'Syncing' : 'Idle'}
           </div>
-          <p>{syncStatus.queueSize} files in queue</p>
-          <p>{syncStatus.watchedFolders.length} watched folders</p>
+          <p>{syncState.queueSize} files in queue</p>
+          <p>{syncState.folders.length} watched folders</p>
         </div>
       </div>
 
@@ -148,13 +148,13 @@ function Dashboard() {
         </div>
       )}
 
-      {syncStatus.recentUploads.length > 0 && (
+      {syncState.recentUploads.length > 0 && (
         <div className="recent-activity">
           <h3>Recent Uploads</h3>
           <ul>
-            {syncStatus.recentUploads.slice(0, 5).map((cid, i) => (
+            {syncState.recentUploads.slice(0, 5).map((filename: string, i: number) => (
               <li key={i}>
-                <code>{cid}</code>
+                {filename}
               </li>
             ))}
           </ul>
