@@ -3,13 +3,13 @@
 //! Based on the archivist-node OpenAPI spec, this module provides
 //! a typed interface to the node's REST API.
 
-use reqwest::{Client, multipart};
+use crate::error::{ArchivistError, Result};
+use reqwest::{multipart, Client};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::Duration;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
-use crate::error::{ArchivistError, Result};
 
 /// Response from /api/v1/debug/info
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,19 +116,20 @@ impl NodeApiClient {
     pub async fn get_info(&self) -> Result<NodeInfo> {
         let url = format!("{}/api/v1/debug/info", self.base_url);
 
-        let response = self.client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| ArchivistError::ApiError(format!("Failed to connect to node: {}", e)))?;
+        let response =
+            self.client.get(&url).send().await.map_err(|e| {
+                ArchivistError::ApiError(format!("Failed to connect to node: {}", e))
+            })?;
 
         if !response.status().is_success() {
-            return Err(ArchivistError::ApiError(
-                format!("Node API error: HTTP {}", response.status())
-            ));
+            return Err(ArchivistError::ApiError(format!(
+                "Node API error: HTTP {}",
+                response.status()
+            )));
         }
 
-        response.json::<NodeInfo>()
+        response
+            .json::<NodeInfo>()
             .await
             .map_err(|e| ArchivistError::ApiError(format!("Failed to parse node info: {}", e)))
     }
@@ -137,7 +138,8 @@ impl NodeApiClient {
     pub async fn health_check(&self) -> Result<bool> {
         let url = format!("{}/api/v1/debug/info", self.base_url);
 
-        match self.client
+        match self
+            .client
             .get(&url)
             .timeout(Duration::from_secs(5))
             .send()
@@ -152,19 +154,22 @@ impl NodeApiClient {
     pub async fn list_data(&self) -> Result<DataListResponse> {
         let url = format!("{}/api/v1/data", self.base_url);
 
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
             .send()
             .await
             .map_err(|e| ArchivistError::ApiError(format!("Failed to list data: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(ArchivistError::ApiError(
-                format!("Failed to list data: HTTP {}", response.status())
-            ));
+            return Err(ArchivistError::ApiError(format!(
+                "Failed to list data: HTTP {}",
+                response.status()
+            )));
         }
 
-        response.json::<DataListResponse>()
+        response
+            .json::<DataListResponse>()
             .await
             .map_err(|e| ArchivistError::ApiError(format!("Failed to parse data list: {}", e)))
     }
@@ -174,14 +179,14 @@ impl NodeApiClient {
         let url = format!("{}/api/v1/data", self.base_url);
 
         // Read file contents
-        let mut file = File::open(file_path)
-            .await
-            .map_err(|e| ArchivistError::FileOperationFailed(format!("Failed to open file: {}", e)))?;
+        let mut file = File::open(file_path).await.map_err(|e| {
+            ArchivistError::FileOperationFailed(format!("Failed to open file: {}", e))
+        })?;
 
         let mut contents = Vec::new();
-        file.read_to_end(&mut contents)
-            .await
-            .map_err(|e| ArchivistError::FileOperationFailed(format!("Failed to read file: {}", e)))?;
+        file.read_to_end(&mut contents).await.map_err(|e| {
+            ArchivistError::FileOperationFailed(format!("Failed to read file: {}", e))
+        })?;
 
         let filename = file_path
             .file_name()
@@ -198,12 +203,14 @@ impl NodeApiClient {
         let part = multipart::Part::bytes(contents)
             .file_name(filename.clone())
             .mime_str(&mime_type)
-            .map_err(|e| ArchivistError::FileOperationFailed(format!("Invalid MIME type: {}", e)))?;
+            .map_err(|e| {
+                ArchivistError::FileOperationFailed(format!("Invalid MIME type: {}", e))
+            })?;
 
-        let form = multipart::Form::new()
-            .part("file", part);
+        let form = multipart::Form::new().part("file", part);
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .multipart(form)
             .timeout(Duration::from_secs(300)) // 5 min timeout for large files
@@ -214,21 +221,23 @@ impl NodeApiClient {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(ArchivistError::ApiError(
-                format!("Upload failed: HTTP {} - {}", status, body)
-            ));
+            return Err(ArchivistError::ApiError(format!(
+                "Upload failed: HTTP {} - {}",
+                status, body
+            )));
         }
 
-        response.json::<UploadResponse>()
-            .await
-            .map_err(|e| ArchivistError::ApiError(format!("Failed to parse upload response: {}", e)))
+        response.json::<UploadResponse>().await.map_err(|e| {
+            ArchivistError::ApiError(format!("Failed to parse upload response: {}", e))
+        })
     }
 
     /// Download a file by CID (from local storage)
     pub async fn download_file(&self, cid: &str) -> Result<Vec<u8>> {
         let url = format!("{}/api/v1/data/{}", self.base_url, cid);
 
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
             .timeout(Duration::from_secs(300))
             .send()
@@ -236,12 +245,14 @@ impl NodeApiClient {
             .map_err(|e| ArchivistError::ApiError(format!("Download failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(ArchivistError::ApiError(
-                format!("Download failed: HTTP {}", response.status())
-            ));
+            return Err(ArchivistError::ApiError(format!(
+                "Download failed: HTTP {}",
+                response.status()
+            )));
         }
 
-        response.bytes()
+        response
+            .bytes()
             .await
             .map(|b| b.to_vec())
             .map_err(|e| ArchivistError::ApiError(format!("Failed to read download: {}", e)))
@@ -251,7 +262,8 @@ impl NodeApiClient {
     pub async fn download_file_network(&self, cid: &str) -> Result<Vec<u8>> {
         let url = format!("{}/api/v1/data/{}/network", self.base_url, cid);
 
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
             .timeout(Duration::from_secs(600)) // 10 min for network downloads
             .send()
@@ -259,12 +271,14 @@ impl NodeApiClient {
             .map_err(|e| ArchivistError::ApiError(format!("Network download failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(ArchivistError::ApiError(
-                format!("Network download failed: HTTP {}", response.status())
-            ));
+            return Err(ArchivistError::ApiError(format!(
+                "Network download failed: HTTP {}",
+                response.status()
+            )));
         }
 
-        response.bytes()
+        response
+            .bytes()
             .await
             .map(|b| b.to_vec())
             .map_err(|e| ArchivistError::ApiError(format!("Failed to read download: {}", e)))
@@ -274,19 +288,22 @@ impl NodeApiClient {
     pub async fn get_spr(&self) -> Result<String> {
         let url = format!("{}/api/v1/spr", self.base_url);
 
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
             .send()
             .await
             .map_err(|e| ArchivistError::ApiError(format!("Failed to get SPR: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(ArchivistError::ApiError(
-                format!("Failed to get SPR: HTTP {}", response.status())
-            ));
+            return Err(ArchivistError::ApiError(format!(
+                "Failed to get SPR: HTTP {}",
+                response.status()
+            )));
         }
 
-        response.text()
+        response
+            .text()
             .await
             .map_err(|e| ArchivistError::ApiError(format!("Failed to read SPR: {}", e)))
     }
@@ -295,19 +312,22 @@ impl NodeApiClient {
     pub async fn list_peers(&self) -> Result<Vec<PeerInfo>> {
         let url = format!("{}/api/v1/peers", self.base_url);
 
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
             .send()
             .await
             .map_err(|e| ArchivistError::ApiError(format!("Failed to list peers: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(ArchivistError::ApiError(
-                format!("Failed to list peers: HTTP {}", response.status())
-            ));
+            return Err(ArchivistError::ApiError(format!(
+                "Failed to list peers: HTTP {}",
+                response.status()
+            )));
         }
 
-        response.json::<Vec<PeerInfo>>()
+        response
+            .json::<Vec<PeerInfo>>()
             .await
             .map_err(|e| ArchivistError::ApiError(format!("Failed to parse peers: {}", e)))
     }
@@ -321,16 +341,16 @@ impl NodeApiClient {
             urlencoding::encode(multiaddr)
         );
 
-        let response = self.client
-            .post(&url)
-            .send()
-            .await
-            .map_err(|e| ArchivistError::ApiError(format!("Failed to connect to peer: {}", e)))?;
+        let response =
+            self.client.post(&url).send().await.map_err(|e| {
+                ArchivistError::ApiError(format!("Failed to connect to peer: {}", e))
+            })?;
 
         if !response.status().is_success() {
-            return Err(ArchivistError::ApiError(
-                format!("Failed to connect to peer: HTTP {}", response.status())
-            ));
+            return Err(ArchivistError::ApiError(format!(
+                "Failed to connect to peer: HTTP {}",
+                response.status()
+            )));
         }
 
         Ok(())

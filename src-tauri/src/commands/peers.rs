@@ -1,7 +1,7 @@
-use tauri::State;
 use crate::error::Result;
-use crate::state::AppState;
 use crate::services::peers::{PeerInfo, PeerList};
+use crate::state::AppState;
+use tauri::State;
 
 #[tauri::command]
 pub async fn get_peers(state: State<'_, AppState>) -> Result<PeerList> {

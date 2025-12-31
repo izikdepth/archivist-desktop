@@ -1,13 +1,13 @@
-use serde::{Deserialize, Serialize};
+use crate::error::{ArchivistError, Result};
+use crate::node_api::NodeApiClient;
 use chrono::{DateTime, Utc};
-use uuid::Uuid;
+use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
-use notify::{RecommendedWatcher, RecursiveMode, Watcher, Event, EventKind};
-use crate::error::{ArchivistError, Result};
-use crate::node_api::NodeApiClient;
+use uuid::Uuid;
 
 /// Watched folder configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -122,32 +122,34 @@ impl SyncService {
         let (tx, rx) = mpsc::unbounded_channel();
         let tx_clone = tx.clone();
 
-        let watcher = notify::recommended_watcher(move |res: std::result::Result<Event, notify::Error>| {
-            if let Ok(event) = res {
-                match event.kind {
-                    EventKind::Create(_) => {
-                        for path in event.paths {
-                            if path.is_file() {
-                                let _ = tx_clone.send(SyncEvent::FileCreated(path));
+        let watcher =
+            notify::recommended_watcher(move |res: std::result::Result<Event, notify::Error>| {
+                if let Ok(event) = res {
+                    match event.kind {
+                        EventKind::Create(_) => {
+                            for path in event.paths {
+                                if path.is_file() {
+                                    let _ = tx_clone.send(SyncEvent::FileCreated(path));
+                                }
                             }
                         }
-                    }
-                    EventKind::Modify(_) => {
-                        for path in event.paths {
-                            if path.is_file() {
-                                let _ = tx_clone.send(SyncEvent::FileModified(path));
+                        EventKind::Modify(_) => {
+                            for path in event.paths {
+                                if path.is_file() {
+                                    let _ = tx_clone.send(SyncEvent::FileModified(path));
+                                }
                             }
                         }
-                    }
-                    EventKind::Remove(_) => {
-                        for path in event.paths {
-                            let _ = tx_clone.send(SyncEvent::FileDeleted(path));
+                        EventKind::Remove(_) => {
+                            for path in event.paths {
+                                let _ = tx_clone.send(SyncEvent::FileDeleted(path));
+                            }
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
-            }
-        }).map_err(|e| ArchivistError::SyncError(format!("Failed to create watcher: {}", e)))?;
+            })
+            .map_err(|e| ArchivistError::SyncError(format!("Failed to create watcher: {}", e)))?;
 
         self.watcher = Some(watcher);
         self.event_tx = Some(tx);
@@ -165,7 +167,9 @@ impl SyncService {
 
         // Check if already watching
         if self.folders.values().any(|f| f.path == path) {
-            return Err(ArchivistError::SyncError("Folder already being watched".to_string()));
+            return Err(ArchivistError::SyncError(
+                "Folder already being watched".to_string(),
+            ));
         }
 
         let id = Uuid::new_v4().to_string();
@@ -185,12 +189,18 @@ impl SyncService {
 
         // Add to watcher if available
         if let Some(ref mut watcher) = self.watcher {
-            watcher.watch(path_buf, RecursiveMode::Recursive)
+            watcher
+                .watch(path_buf, RecursiveMode::Recursive)
                 .map_err(|e| ArchivistError::SyncError(format!("Failed to watch folder: {}", e)))?;
         }
 
         self.folders.insert(id, folder.clone());
-        log::info!("Added watched folder: {} ({} files, {} bytes)", path, file_count, total_size);
+        log::info!(
+            "Added watched folder: {} ({} files, {} bytes)",
+            path,
+            file_count,
+            total_size
+        );
 
         // Queue initial scan
         if let Some(ref tx) = self.event_tx {
@@ -202,7 +212,9 @@ impl SyncService {
 
     /// Remove a watched folder
     pub async fn remove_folder(&mut self, folder_id: &str) -> Result<()> {
-        let folder = self.folders.remove(folder_id)
+        let folder = self
+            .folders
+            .remove(folder_id)
             .ok_or_else(|| ArchivistError::FileNotFound(folder_id.to_string()))?;
 
         // Remove from watcher
@@ -219,11 +231,17 @@ impl SyncService {
 
     /// Toggle folder enabled state
     pub async fn toggle_folder(&mut self, folder_id: &str, enabled: bool) -> Result<()> {
-        let folder = self.folders.get_mut(folder_id)
+        let folder = self
+            .folders
+            .get_mut(folder_id)
             .ok_or_else(|| ArchivistError::FileNotFound(folder_id.to_string()))?;
 
         folder.enabled = enabled;
-        folder.status = if enabled { FolderStatus::Idle } else { FolderStatus::Paused };
+        folder.status = if enabled {
+            FolderStatus::Idle
+        } else {
+            FolderStatus::Paused
+        };
 
         log::info!("Folder {} enabled: {}", folder.path, enabled);
         Ok(())
@@ -257,7 +275,10 @@ impl SyncService {
         self.upload_queue.clear();
 
         for folder in self.folders.values_mut() {
-            if matches!(folder.status, FolderStatus::Syncing | FolderStatus::Scanning) {
+            if matches!(
+                folder.status,
+                FolderStatus::Syncing | FolderStatus::Scanning
+            ) {
                 folder.status = FolderStatus::Paused;
             }
         }
@@ -316,7 +337,9 @@ impl SyncService {
                             self.synced_files.insert(pending.path.clone());
 
                             // Track recent uploads
-                            let filename = pending.path.file_name()
+                            let filename = pending
+                                .path
+                                .file_name()
                                 .map(|n| n.to_string_lossy().to_string())
                                 .unwrap_or_else(|| "unknown".to_string());
                             self.recent_uploads.insert(0, filename);
@@ -378,7 +401,9 @@ impl SyncService {
 
     /// Scan folder for files to sync
     async fn scan_folder(&mut self, folder_id: &str) -> Result<()> {
-        let folder = self.folders.get(folder_id)
+        let folder = self
+            .folders
+            .get(folder_id)
             .ok_or_else(|| ArchivistError::FileNotFound(folder_id.to_string()))?
             .clone();
 
@@ -415,11 +440,12 @@ impl SyncService {
             return Ok(files);
         }
 
-        for entry in std::fs::read_dir(dir)
-            .map_err(|e| ArchivistError::FileOperationFailed(format!("Failed to read dir: {}", e)))?
-        {
-            let entry = entry
-                .map_err(|e| ArchivistError::FileOperationFailed(format!("Failed to read entry: {}", e)))?;
+        for entry in std::fs::read_dir(dir).map_err(|e| {
+            ArchivistError::FileOperationFailed(format!("Failed to read dir: {}", e))
+        })? {
+            let entry = entry.map_err(|e| {
+                ArchivistError::FileOperationFailed(format!("Failed to read entry: {}", e))
+            })?;
             let path = entry.path();
 
             // Skip hidden files/folders
@@ -442,7 +468,8 @@ impl SyncService {
     /// Get folder stats
     fn scan_folder_stats(&self, path: &Path) -> Result<(u32, u64)> {
         let files = self.collect_files(path)?;
-        let total_size: u64 = files.iter()
+        let total_size: u64 = files
+            .iter()
             .filter_map(|p| std::fs::metadata(p).ok())
             .map(|m| m.len())
             .sum();

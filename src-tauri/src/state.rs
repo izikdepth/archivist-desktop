@@ -1,9 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::services::{
-    ConfigService, FileService, NodeService, PeerService, SyncService,
-};
+use crate::services::{ConfigService, FileService, NodeService, PeerService, SyncService};
 
 /// Global application state managed by Tauri
 pub struct AppState {

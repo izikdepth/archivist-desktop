@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
-use std::path::Path;
-use std::collections::HashMap;
 use crate::error::{ArchivistError, Result};
 use crate::node_api::NodeApiClient;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::Path;
 
 /// File information stored locally and synced with node
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,28 +69,31 @@ impl FileService {
             Ok(response) => {
                 // Update local cache with data from node
                 for item in response.content {
-                    if !self.files.contains_key(&item.cid) {
+                    if let std::collections::hash_map::Entry::Vacant(e) =
+                        self.files.entry(item.cid.clone())
+                    {
                         let file_info = FileInfo {
                             cid: item.cid.clone(),
-                            name: item.manifest
+                            name: item
+                                .manifest
                                 .as_ref()
                                 .and_then(|m| m.filename.clone())
                                 .unwrap_or_else(|| format!("file-{}", &item.cid[..8])),
-                            size_bytes: item.manifest
+                            size_bytes: item
+                                .manifest
                                 .as_ref()
                                 .and_then(|m| m.upload_bytes)
                                 .unwrap_or(0),
-                            mime_type: item.manifest
-                                .as_ref()
-                                .and_then(|m| m.mimetype.clone()),
+                            mime_type: item.manifest.as_ref().and_then(|m| m.mimetype.clone()),
                             uploaded_at: Utc::now(),
-                            is_pinned: item.manifest
+                            is_pinned: item
+                                .manifest
                                 .as_ref()
                                 .and_then(|m| m.protected)
                                 .unwrap_or(false),
                             is_local: true,
                         };
-                        self.files.insert(item.cid, file_info);
+                        e.insert(file_info);
                     }
                 }
                 Ok(())
@@ -123,13 +126,17 @@ impl FileService {
         let path = Path::new(path);
 
         if !path.exists() {
-            return Err(ArchivistError::FileNotFound(path.to_string_lossy().to_string()));
+            return Err(ArchivistError::FileNotFound(
+                path.to_string_lossy().to_string(),
+            ));
         }
 
-        let metadata = std::fs::metadata(path)
-            .map_err(|e| ArchivistError::FileOperationFailed(format!("Failed to read file metadata: {}", e)))?;
+        let metadata = std::fs::metadata(path).map_err(|e| {
+            ArchivistError::FileOperationFailed(format!("Failed to read file metadata: {}", e))
+        })?;
 
-        let filename = path.file_name()
+        let filename = path
+            .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "unknown".to_string());
 
@@ -143,9 +150,7 @@ impl FileService {
             cid: response.cid.clone(),
             name: filename.clone(),
             size_bytes: metadata.len(),
-            mime_type: mime_guess::from_path(path)
-                .first()
-                .map(|m| m.to_string()),
+            mime_type: mime_guess::from_path(path).first().map(|m| m.to_string()),
             uploaded_at: Utc::now(),
             is_pinned: true,
             is_local: true,
@@ -153,7 +158,11 @@ impl FileService {
 
         self.files.insert(response.cid.clone(), file_info);
 
-        log::info!("File uploaded successfully: {} -> {}", filename, response.cid);
+        log::info!(
+            "File uploaded successfully: {} -> {}",
+            filename,
+            response.cid
+        );
 
         Ok(UploadResult {
             cid: response.cid,
@@ -176,9 +185,9 @@ impl FileService {
         };
 
         // Write to destination
-        tokio::fs::write(destination, &data)
-            .await
-            .map_err(|e| ArchivistError::FileOperationFailed(format!("Failed to write file: {}", e)))?;
+        tokio::fs::write(destination, &data).await.map_err(|e| {
+            ArchivistError::FileOperationFailed(format!("Failed to write file: {}", e))
+        })?;
 
         log::info!("Downloaded {} bytes to {}", data.len(), destination);
         Ok(())

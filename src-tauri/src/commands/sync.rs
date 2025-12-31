@@ -1,7 +1,7 @@
-use tauri::State;
 use crate::error::Result;
-use crate::state::AppState;
 use crate::services::sync::{SyncState, WatchedFolder};
+use crate::state::AppState;
+use tauri::State;
 
 #[tauri::command]
 pub async fn get_sync_status(state: State<'_, AppState>) -> Result<SyncState> {

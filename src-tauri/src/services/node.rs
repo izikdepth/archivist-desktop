@@ -1,27 +1,22 @@
+use crate::error::{ArchivistError, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{broadcast, RwLock};
 use tauri::AppHandle;
-use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
-use crate::error::{ArchivistError, Result};
+use tauri_plugin_shell::ShellExt;
+use tokio::sync::{broadcast, RwLock};
 
 /// Node running status
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NodeState {
+    #[default]
     Stopped,
     Starting,
     Running,
     Stopping,
     Error,
-}
-
-impl Default for NodeState {
-    fn default() -> Self {
-        Self::Stopped
-    }
 }
 
 /// Detailed node status for the frontend
@@ -142,8 +137,9 @@ impl NodeService {
         // Ensure data directory exists
         let data_dir = std::path::Path::new(&self.config.data_dir);
         if !data_dir.exists() {
-            std::fs::create_dir_all(data_dir)
-                .map_err(|e| ArchivistError::NodeStartFailed(format!("Failed to create data dir: {}", e)))?;
+            std::fs::create_dir_all(data_dir).map_err(|e| {
+                ArchivistError::NodeStartFailed(format!("Failed to create data dir: {}", e))
+            })?;
         }
 
         // Build sidecar command with arguments
@@ -152,15 +148,18 @@ impl NodeService {
             .sidecar("archivist")
             .map_err(|e| ArchivistError::NodeStartFailed(format!("Sidecar not found: {}", e)))?
             .args([
-                "--data-dir", &self.config.data_dir,
-                "--api-port", &self.config.api_port.to_string(),
-                "--p2p-port", &self.config.p2p_port.to_string(),
+                "--data-dir",
+                &self.config.data_dir,
+                "--api-port",
+                &self.config.api_port.to_string(),
+                "--p2p-port",
+                &self.config.p2p_port.to_string(),
             ]);
 
         // Spawn the sidecar process
-        let (mut rx, child) = sidecar_command
-            .spawn()
-            .map_err(|e| ArchivistError::NodeStartFailed(format!("Failed to spawn sidecar: {}", e)))?;
+        let (mut rx, child) = sidecar_command.spawn().map_err(|e| {
+            ArchivistError::NodeStartFailed(format!("Failed to spawn sidecar: {}", e))
+        })?;
 
         let pid = child.pid();
         log::info!("Archivist node started with PID: {}", pid);
@@ -197,8 +196,11 @@ impl NodeService {
                         log::error!("[archivist-node] Error: {}", e);
                     }
                     CommandEvent::Terminated(payload) => {
-                        log::info!("[archivist-node] Terminated with code: {:?}, signal: {:?}",
-                            payload.code, payload.signal);
+                        log::info!(
+                            "[archivist-node] Terminated with code: {:?}, signal: {:?}",
+                            payload.code,
+                            payload.signal
+                        );
                         break;
                     }
                     _ => {}
@@ -226,8 +228,9 @@ impl NodeService {
         // Kill the process
         if let Some(mut process_state) = self.process_state.take() {
             if let Some(child) = process_state.child.take() {
-                child.kill()
-                    .map_err(|e| ArchivistError::NodeStopFailed(format!("Failed to kill process: {}", e)))?;
+                child.kill().map_err(|e| {
+                    ArchivistError::NodeStopFailed(format!("Failed to kill process: {}", e))
+                })?;
             }
         }
 
@@ -299,8 +302,12 @@ impl NodeService {
                 Ok(true)
             }
             Ok(response) => {
-                log::warn!("Node health check failed with status: {}", response.status());
-                self.status.last_error = Some(format!("Health check failed: HTTP {}", response.status()));
+                log::warn!(
+                    "Node health check failed with status: {}",
+                    response.status()
+                );
+                self.status.last_error =
+                    Some(format!("Health check failed: HTTP {}", response.status()));
                 Ok(false)
             }
             Err(e) => {
@@ -363,7 +370,10 @@ pub struct NodeManager {
 
 impl NodeManager {
     pub fn new(service: Arc<RwLock<NodeService>>, app_handle: AppHandle) -> Self {
-        Self { service, app_handle }
+        Self {
+            service,
+            app_handle,
+        }
     }
 
     /// Start the health monitoring loop
@@ -412,9 +422,11 @@ impl NodeManager {
 
                             // Auto-restart if enabled and under limit
                             if node.should_auto_restart() {
-                                log::info!("Attempting auto-restart ({}/{})",
+                                log::info!(
+                                    "Attempting auto-restart ({}/{})",
                                     node.get_restart_count() + 1,
-                                    config.max_restart_attempts);
+                                    config.max_restart_attempts
+                                );
                                 drop(node); // Release lock before restart
                                 let mut node = service.write().await;
                                 if let Err(e) = node.restart(&app_handle).await {

@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 use crate::error::{ArchivistError, Result};
 use crate::node_api::NodeApiClient;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 /// Peer information for frontend display
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -231,7 +231,7 @@ impl PeerService {
         }
 
         Err(ArchivistError::PeerConnectionFailed(
-            "Invalid multiaddr format. Expected /ip4/.../p2p/PeerId".to_string()
+            "Invalid multiaddr format. Expected /ip4/.../p2p/PeerId".to_string(),
         ))
     }
 }

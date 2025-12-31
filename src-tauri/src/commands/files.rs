@@ -1,7 +1,7 @@
-use tauri::State;
 use crate::error::Result;
-use crate::state::AppState;
 use crate::services::files::{FileInfo, FileList, UploadResult};
+use crate::state::AppState;
+use tauri::State;
 
 /// List all files from the node
 #[tauri::command]
@@ -37,11 +37,7 @@ pub async fn delete_file(state: State<'_, AppState>, cid: String) -> Result<()> 
 
 /// Pin or unpin a file
 #[tauri::command]
-pub async fn pin_file(
-    state: State<'_, AppState>,
-    cid: String,
-    pinned: bool,
-) -> Result<()> {
+pub async fn pin_file(state: State<'_, AppState>, cid: String, pinned: bool) -> Result<()> {
     let mut files = state.files.write().await;
     files.pin_file(&cid, pinned).await
 }

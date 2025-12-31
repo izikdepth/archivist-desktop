@@ -14,11 +14,13 @@ pub use sync::SyncService;
 
 // V2 Marketplace services (conditionally compiled)
 #[cfg(feature = "marketplace")]
-mod wallet;
-#[cfg(feature = "marketplace")]
 mod marketplace;
-
 #[cfg(feature = "marketplace")]
-pub use wallet::WalletService;
+mod wallet;
+
+#[allow(unused_imports)]
 #[cfg(feature = "marketplace")]
 pub use marketplace::MarketplaceService;
+#[allow(unused_imports)]
+#[cfg(feature = "marketplace")]
+pub use wallet::WalletService;

@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::error::{ArchivistError, Result};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -114,8 +114,7 @@ impl ConfigService {
             .map(|p| p.join("archivist").join("config.toml"))
             .unwrap_or_else(|| std::path::PathBuf::from("config.toml"));
 
-        let config = Self::load_from_file(&config_path)
-            .unwrap_or_default();
+        let config = Self::load_from_file(&config_path).unwrap_or_default();
 
         Self {
             config,
@@ -131,8 +130,7 @@ impl ConfigService {
         let contents = std::fs::read_to_string(path)
             .map_err(|e| ArchivistError::ConfigError(e.to_string()))?;
 
-        toml::from_str(&contents)
-            .map_err(|e| ArchivistError::ConfigError(e.to_string()))
+        toml::from_str(&contents).map_err(|e| ArchivistError::ConfigError(e.to_string()))
     }
 
     pub fn get(&self) -> AppConfig {

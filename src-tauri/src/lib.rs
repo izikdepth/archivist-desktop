@@ -5,16 +5,16 @@ pub mod node_api;
 mod services;
 mod state;
 
-use state::AppState;
 use services::node::NodeManager;
 use services::sync::SyncManager;
+use state::AppState;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use tauri::Manager;
+use tauri::menu::{Menu, MenuItem};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use tauri::menu::{Menu, MenuItem};
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -24,9 +24,11 @@ pub fn run() {
     let sync_service = app_state.sync.clone();
 
     let mut builder = tauri::Builder::default()
-        .plugin(tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build())
+        .plugin(
+            tauri_plugin_log::Builder::default()
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
@@ -94,12 +96,18 @@ pub fn run() {
             commands::get_arch,
         ])
         .setup(move |app| {
-            log::info!("Archivist Desktop v{} starting...", env!("CARGO_PKG_VERSION"));
+            log::info!(
+                "Archivist Desktop v{} starting...",
+                env!("CARGO_PKG_VERSION")
+            );
 
             // Log feature status
             let features = features::Features::new();
-            log::info!("Features: marketplace={}, zk_proofs={}",
-                features.marketplace, features.zk_proofs);
+            log::info!(
+                "Features: marketplace={}, zk_proofs={}",
+                features.marketplace,
+                features.zk_proofs
+            );
 
             // Set up system tray (desktop only)
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -160,20 +168,18 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
         .icon(app.default_window_icon().unwrap().clone())
         .menu(&menu)
         .tooltip("Archivist - Decentralized Storage")
-        .on_menu_event(|app, event| {
-            match event.id.as_ref() {
-                "show" => {
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
                 }
-                "quit" => {
-                    log::info!("Quit requested from tray");
-                    app.exit(0);
-                }
-                _ => {}
             }
+            "quit" => {
+                log::info!("Quit requested from tray");
+                app.exit(0);
+            }
+            _ => {}
         })
         .on_tray_icon_event(|tray, event| {
             // Show window on double-click or left-click (platform dependent)
