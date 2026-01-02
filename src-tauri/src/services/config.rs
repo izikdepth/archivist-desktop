@@ -79,8 +79,8 @@ impl Default for AppConfig {
             start_on_boot: false,
             node: NodeSettings {
                 data_directory: data_dir,
-                api_port: 5001,
-                p2p_port: 4001,
+                api_port: 8080, // Default archivist-node API port
+                p2p_port: 8090, // Default archivist-node discovery port
                 max_storage_gb: 10,
                 auto_start: true,
             },

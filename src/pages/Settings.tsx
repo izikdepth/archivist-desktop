@@ -34,8 +34,8 @@ const defaultConfig: AppConfig = {
   start_on_boot: false,
   node: {
     data_directory: '',
-    api_port: 5001,
-    p2p_port: 4001,
+    api_port: 8080,
+    p2p_port: 8090,
     max_storage_gb: 10,
     auto_start: true,
   },
@@ -239,7 +239,7 @@ function Settings() {
               onChange={(e) =>
                 setConfig((prev) => ({
                   ...prev,
-                  node: { ...prev.node, api_port: parseInt(e.target.value) || 5001 },
+                  node: { ...prev.node, api_port: parseInt(e.target.value) || 8080 },
                 }))
               }
               min={1024}
@@ -254,7 +254,7 @@ function Settings() {
               onChange={(e) =>
                 setConfig((prev) => ({
                   ...prev,
-                  node: { ...prev.node, p2p_port: parseInt(e.target.value) || 4001 },
+                  node: { ...prev.node, p2p_port: parseInt(e.target.value) || 8090 },
                 }))
               }
               min={1024}

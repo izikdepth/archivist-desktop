@@ -76,8 +76,8 @@ impl Default for NodeConfig {
 
         Self {
             data_dir,
-            api_port: 5001,
-            p2p_port: 4001,
+            api_port: 8080, // Default archivist-node API port
+            p2p_port: 8090, // Default archivist-node discovery port
             max_storage_bytes: 10 * 1024 * 1024 * 1024, // 10 GB default
             auto_start: false,
             auto_restart: true,
@@ -143,17 +143,15 @@ impl NodeService {
         }
 
         // Build sidecar command with arguments
+        // Note: archivist-node uses --key=value format (not --key value)
         let sidecar_command = app_handle
             .shell()
             .sidecar("archivist")
             .map_err(|e| ArchivistError::NodeStartFailed(format!("Sidecar not found: {}", e)))?
             .args([
-                "--data-dir",
-                &self.config.data_dir,
-                "--api-port",
-                &self.config.api_port.to_string(),
-                "--p2p-port",
-                &self.config.p2p_port.to_string(),
+                &format!("--data-dir={}", self.config.data_dir),
+                &format!("--api-port={}", self.config.api_port),
+                &format!("--disc-port={}", self.config.p2p_port),
             ]);
 
         // Spawn the sidecar process
@@ -289,7 +287,11 @@ impl NodeService {
             return Ok(false);
         }
 
-        let api_url = format!("http://127.0.0.1:{}/health", self.config.api_port);
+        // Use the debug/info endpoint to check node health
+        let api_url = format!(
+            "http://127.0.0.1:{}/api/archivist/v1/debug/info",
+            self.config.api_port
+        );
 
         match reqwest::Client::new()
             .get(&api_url)
