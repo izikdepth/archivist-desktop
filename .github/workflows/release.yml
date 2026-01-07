@@ -100,7 +100,7 @@ jobs:
           SKIP_CHECKSUM_VERIFY: "true"
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@42bc5978cd74d5765980444d65616d89cfca935d # v0.5.17
+        uses: tauri-apps/tauri-action@73fb865345c54760d875b94642314f8c0c894afa # v0.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
