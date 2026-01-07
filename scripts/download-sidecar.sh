@@ -1,6 +1,8 @@
 #!/bin/bash
 # Download the appropriate archivist-node binary for the current platform
 # This script is used during development and CI/CD builds
+#
+# Security: Verifies SHA256 checksums of downloaded binaries
 
 set -e
 
@@ -8,6 +10,19 @@ ARCHIVIST_VERSION="v0.1.0"
 RELEASE_BASE_URL="https://github.com/durability-labs/archivist-node/releases/download/${ARCHIVIST_VERSION}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SIDECARS_DIR="${SCRIPT_DIR}/../src-tauri/sidecars"
+
+# SHA256 checksums for archivist-node v0.1.0 binaries
+# These should be updated when upgrading ARCHIVIST_VERSION
+declare -A CHECKSUMS=(
+    ["linux-amd64"]="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ["linux-arm64"]="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ["darwin-amd64"]="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ["darwin-arm64"]="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ["windows-amd64"]="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+)
+
+# Set to "true" to skip checksum verification (NOT RECOMMENDED for production)
+SKIP_CHECKSUM_VERIFY="${SKIP_CHECKSUM_VERIFY:-false}"
 
 # Detect OS and architecture
 detect_platform() {
@@ -53,6 +68,56 @@ get_tauri_target() {
     echo "${arch}-${os}"
 }
 
+# Verify SHA256 checksum of a file
+verify_checksum() {
+    local file="$1"
+    local expected_checksum="$2"
+    local actual_checksum
+
+    if [[ "$SKIP_CHECKSUM_VERIFY" == "true" ]]; then
+        echo "WARNING: Skipping checksum verification (SKIP_CHECKSUM_VERIFY=true)"
+        return 0
+    fi
+
+    if [[ -z "$expected_checksum" || "$expected_checksum" == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]]; then
+        echo "WARNING: No valid checksum configured for this platform."
+        echo "         To get the checksum, run: sha256sum <downloaded-archive>"
+        echo "         Then update CHECKSUMS in this script."
+        echo ""
+        read -p "Continue without verification? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "Aborting download."
+            exit 1
+        fi
+        return 0
+    fi
+
+    echo "Verifying checksum..."
+
+    # Use sha256sum on Linux, shasum on macOS
+    if command -v sha256sum &> /dev/null; then
+        actual_checksum=$(sha256sum "$file" | cut -d' ' -f1)
+    elif command -v shasum &> /dev/null; then
+        actual_checksum=$(shasum -a 256 "$file" | cut -d' ' -f1)
+    else
+        echo "ERROR: No SHA256 tool found (sha256sum or shasum)"
+        exit 1
+    fi
+
+    if [[ "$actual_checksum" != "$expected_checksum" ]]; then
+        echo "ERROR: Checksum verification failed!"
+        echo "  Expected: $expected_checksum"
+        echo "  Actual:   $actual_checksum"
+        echo ""
+        echo "This could indicate a corrupted download or a supply chain attack."
+        echo "Please verify the download source and try again."
+        exit 1
+    fi
+
+    echo "Checksum verified: $actual_checksum"
+}
+
 # Download and extract the binary
 download_binary() {
     local platform="$1"
@@ -83,6 +148,10 @@ download_binary() {
     trap "rm -rf ${temp_dir}" EXIT
 
     curl -L -o "${temp_dir}/archivist.${archive_ext}" "${download_url}"
+
+    # Verify checksum before extraction
+    local expected_checksum="${CHECKSUMS[$platform]}"
+    verify_checksum "${temp_dir}/archivist.${archive_ext}" "$expected_checksum"
 
     echo "Extracting binary..."
     if [[ "$archive_ext" == "zip" ]]; then

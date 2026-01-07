@@ -4,7 +4,7 @@
 //! a typed interface to the node's REST API.
 
 use crate::error::{ArchivistError, Result};
-use reqwest::{multipart, Client};
+use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::Duration;
@@ -175,6 +175,10 @@ impl NodeApiClient {
     }
 
     /// Upload a file to the node
+    ///
+    /// The archivist-node API expects raw binary data with:
+    /// - Content-Type header set to the file's MIME type
+    /// - Content-Disposition header with the filename
     pub async fn upload_file(&self, file_path: &Path) -> Result<UploadResponse> {
         let url = format!("{}/api/archivist/v1/data", self.base_url);
 
@@ -199,20 +203,15 @@ impl NodeApiClient {
             .map(|m| m.to_string())
             .unwrap_or_else(|| "application/octet-stream".to_string());
 
-        // Build multipart form
-        let part = multipart::Part::bytes(contents)
-            .file_name(filename.clone())
-            .mime_str(&mime_type)
-            .map_err(|e| {
-                ArchivistError::FileOperationFailed(format!("Invalid MIME type: {}", e))
-            })?;
-
-        let form = multipart::Form::new().part("file", part);
+        // Build Content-Disposition header for filename
+        let content_disposition = format!("attachment; filename=\"{}\"", filename);
 
         let response = self
             .client
             .post(&url)
-            .multipart(form)
+            .header(header::CONTENT_TYPE, &mime_type)
+            .header(header::CONTENT_DISPOSITION, &content_disposition)
+            .body(contents)
             .timeout(Duration::from_secs(300)) // 5 min timeout for large files
             .send()
             .await
@@ -227,8 +226,13 @@ impl NodeApiClient {
             )));
         }
 
-        response.json::<UploadResponse>().await.map_err(|e| {
-            ArchivistError::ApiError(format!("Failed to parse upload response: {}", e))
+        // archivist-node returns the CID as plain text, not JSON
+        let cid = response.text().await.map_err(|e| {
+            ArchivistError::ApiError(format!("Failed to read upload response: {}", e))
+        })?;
+
+        Ok(UploadResponse {
+            cid: cid.trim().to_string(),
         })
     }
 
