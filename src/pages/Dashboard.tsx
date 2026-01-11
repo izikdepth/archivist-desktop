@@ -1,9 +1,22 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNode, NodeState } from '../hooks/useNode';
 import { useSync } from '../hooks/useSync';
+import { invoke } from '@tauri-apps/api/core';
+
+interface DiagnosticInfo {
+  apiReachable: boolean;
+  apiUrl: string;
+  nodeVersion?: string;
+  peerId?: string;
+  addressCount: number;
+  error?: string;
+}
 
 function Dashboard() {
   const [copied, setCopied] = useState<string | null>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<DiagnosticInfo | null>(null);
+  const [runningDiagnostics, setRunningDiagnostics] = useState(false);
   const {
     status,
     loading,
@@ -74,6 +87,30 @@ function Dashboard() {
       console.error('Failed to copy:', err);
     }
   };
+
+  const runDiagnostics = async () => {
+    setRunningDiagnostics(true);
+    try {
+      const result = await invoke<DiagnosticInfo>('run_node_diagnostics');
+      setDiagnostics(result);
+    } catch (err) {
+      setDiagnostics({
+        apiReachable: false,
+        apiUrl: status.apiUrl || 'http://127.0.0.1:8080',
+        addressCount: 0,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setRunningDiagnostics(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showDiagnostics && !diagnostics && isRunning) {
+      runDiagnostics();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDiagnostics, isRunning]);
 
   return (
     <div className="page">
@@ -217,6 +254,106 @@ function Dashboard() {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Diagnostics Panel */}
+      {isRunning && (
+        <div className="diagnostics-panel">
+          <div className="diagnostics-header">
+            <h3>Connection Diagnostics</h3>
+            <button
+              className="secondary small"
+              onClick={() => setShowDiagnostics(!showDiagnostics)}
+            >
+              {showDiagnostics ? 'Hide' : 'Show'} Diagnostics
+            </button>
+          </div>
+
+          {showDiagnostics && (
+            <div className="diagnostics-content">
+              <p className="diagnostics-description">
+                Use these diagnostics to troubleshoot P2P connectivity issues.
+                See <code>P2P-TESTING-GUIDE.md</code> for detailed testing instructions.
+              </p>
+
+              <button
+                onClick={runDiagnostics}
+                disabled={runningDiagnostics}
+                className="secondary"
+              >
+                {runningDiagnostics ? 'Running...' : 'Run Diagnostics'}
+              </button>
+
+              {diagnostics && (
+                <div className="diagnostic-results">
+                  <div className={`diagnostic-item ${diagnostics.apiReachable ? 'success' : 'error'}`}>
+                    <span className="diagnostic-label">API Reachable:</span>
+                    <span className="diagnostic-value">
+                      {diagnostics.apiReachable ? '✓ Yes' : '✗ No'}
+                    </span>
+                  </div>
+
+                  <div className="diagnostic-item">
+                    <span className="diagnostic-label">API URL:</span>
+                    <span className="diagnostic-value"><code>{diagnostics.apiUrl}</code></span>
+                  </div>
+
+                  {diagnostics.nodeVersion && (
+                    <div className="diagnostic-item success">
+                      <span className="diagnostic-label">Node Version:</span>
+                      <span className="diagnostic-value">{diagnostics.nodeVersion}</span>
+                    </div>
+                  )}
+
+                  {diagnostics.peerId && (
+                    <div className="diagnostic-item success">
+                      <span className="diagnostic-label">Peer ID:</span>
+                      <span className="diagnostic-value">
+                        <code>{diagnostics.peerId.slice(0, 20)}...</code>
+                      </span>
+                    </div>
+                  )}
+
+                  <div className={`diagnostic-item ${diagnostics.addressCount > 0 ? 'success' : 'warning'}`}>
+                    <span className="diagnostic-label">Network Addresses:</span>
+                    <span className="diagnostic-value">{diagnostics.addressCount} found</span>
+                  </div>
+
+                  {diagnostics.error && (
+                    <div className="diagnostic-item error">
+                      <span className="diagnostic-label">Error:</span>
+                      <span className="diagnostic-value">{diagnostics.error}</span>
+                    </div>
+                  )}
+
+                  <div className="diagnostic-tips">
+                    <h4>Troubleshooting Tips:</h4>
+                    <ul>
+                      {!diagnostics.apiReachable && (
+                        <li>Node API is not responding. Try restarting the node.</li>
+                      )}
+                      {diagnostics.apiReachable && diagnostics.addressCount === 0 && (
+                        <li>No network addresses found. Check firewall and network configuration.</li>
+                      )}
+                      {diagnostics.apiReachable && diagnostics.addressCount > 0 && status.peerCount === 0 && (
+                        <li>Node is reachable but no peers connected. Share your SPR on the Peers page.</li>
+                      )}
+                      {diagnostics.apiReachable && status.peerCount > 0 && (
+                        <li>✓ Everything looks good! You have {status.peerCount} connected peer{status.peerCount !== 1 ? 's' : ''}.</li>
+                      )}
+                    </ul>
+                    <p>
+                      For detailed testing instructions, see{' '}
+                      <a href="#" onClick={(e) => {e.preventDefault(); invoke('open_external', {url: 'https://github.com/durability-labs/archivist-desktop/blob/main/P2P-TESTING-GUIDE.md'});}}>
+                        P2P Testing Guide
+                      </a>
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

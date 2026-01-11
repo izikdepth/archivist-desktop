@@ -995,3 +995,126 @@ button.secondary:hover:not(:disabled) {
 .about-link:hover {
   text-decoration: underline;
 }
+
+/* Diagnostics Panel */
+.diagnostics-panel {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.diagnostics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.diagnostics-header h3 {
+  margin: 0;
+}
+
+.diagnostics-content {
+  margin-top: 1rem;
+}
+
+.diagnostics-description {
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+
+.diagnostics-description code {
+  background: var(--bg-primary);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.diagnostic-results {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.diagnostic-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: var(--bg-primary);
+  border-radius: 6px;
+  border-left: 3px solid var(--border-color);
+}
+
+.diagnostic-item.success {
+  border-left-color: #10b981;
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.diagnostic-item.error {
+  border-left-color: #ef4444;
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.diagnostic-item.warning {
+  border-left-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.05);
+}
+
+.diagnostic-label {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.diagnostic-value {
+  color: var(--text-secondary);
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Courier New', monospace;
+}
+
+.diagnostic-value code {
+  background: transparent;
+  padding: 0;
+}
+
+.diagnostic-tips {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: rgba(59, 130, 246, 0.05);
+  border-radius: 6px;
+  border-left: 3px solid #3b82f6;
+}
+
+.diagnostic-tips h4 {
+  margin: 0 0 0.75rem 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.diagnostic-tips ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: var(--text-secondary);
+}
+
+.diagnostic-tips li {
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
+}
+
+.diagnostic-tips p {
+  margin: 1rem 0 0 0;
+  color: var(--text-secondary);
+}
+
+.diagnostic-tips a {
+  color: #3b82f6;
+  text-decoration: none;
+}
+
+.diagnostic-tips a:hover {
+  text-decoration: underline;
+}

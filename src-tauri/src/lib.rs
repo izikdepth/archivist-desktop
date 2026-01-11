@@ -67,6 +67,7 @@ pub fn run() {
             commands::get_node_config,
             commands::set_node_config,
             commands::health_check_node,
+            commands::run_node_diagnostics,
             // File commands
             commands::list_files,
             commands::upload_file,
