@@ -379,18 +379,18 @@ impl NodeService {
         }
 
         // Actually verify the process exists at the OS level
+        #[cfg(unix)]
         if let Some(pid) = self.status.pid {
-            // Check if /proc/<pid> exists (Linux) or use kill(pid, 0) to check
-            #[cfg(unix)]
-            {
-                // kill with signal 0 checks if process exists without sending a signal
-                unsafe { libc::kill(pid as i32, 0) == 0 }
-            }
-            #[cfg(not(unix))]
-            {
-                // On non-Unix, fall back to checking process_state
-                true
-            }
+            // kill with signal 0 checks if process exists without sending a signal
+            unsafe { libc::kill(pid as i32, 0) == 0 }
+        } else {
+            false
+        }
+
+        #[cfg(not(unix))]
+        if self.status.pid.is_some() {
+            // On non-Unix, fall back to checking process_state
+            true
         } else {
             false
         }

@@ -11,6 +11,8 @@ pub struct Features {
     pub analytics: bool,
 }
 
+// Cannot derive Default because we use cfg!() macros for compile-time feature detection
+#[allow(clippy::derivable_impls)]
 impl Default for Features {
     fn default() -> Self {
         Self {
