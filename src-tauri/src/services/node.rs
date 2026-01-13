@@ -168,6 +168,8 @@ impl NodeService {
 
         // Build sidecar command with arguments
         // Note: archivist-node uses --key=value format (not --key value)
+        // Use the same port for both TCP (--listen-addrs) and UDP (--disc-port) for simplicity
+        let listen_addr = format!("/ip4/0.0.0.0/tcp/{}", self.config.p2p_port);
         let sidecar_command = app_handle
             .shell()
             .sidecar("archivist")
@@ -176,6 +178,7 @@ impl NodeService {
                 &format!("--data-dir={}", self.config.data_dir),
                 &format!("--api-port={}", self.config.api_port),
                 &format!("--disc-port={}", self.config.p2p_port),
+                &format!("--listen-addrs={}", listen_addr),
             ]);
 
         // Spawn the sidecar process

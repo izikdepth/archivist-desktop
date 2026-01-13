@@ -88,6 +88,21 @@ function Dashboard() {
     }
   };
 
+  // Get the best address for sharing - prefer LAN IP over localhost
+  const getShareableAddress = (addresses: string[]): string | null => {
+    if (addresses.length === 0) return null;
+    // Find LAN address (192.168.x.x, 10.x.x.x, or 172.16-31.x.x)
+    const lanAddress = addresses.find(addr =>
+      addr.includes('/ip4/192.168.') ||
+      addr.includes('/ip4/10.') ||
+      /\/ip4\/172\.(1[6-9]|2[0-9]|3[0-1])\./.test(addr)
+    );
+    // Return LAN address if found, otherwise first non-localhost address, otherwise first address
+    if (lanAddress) return lanAddress;
+    const nonLocalhost = addresses.find(addr => !addr.includes('/ip4/127.'));
+    return nonLocalhost || addresses[0];
+  };
+
   const runDiagnostics = async () => {
     setRunningDiagnostics(true);
     try {
@@ -206,14 +221,14 @@ function Dashboard() {
               </button>
             </div>
           </div>
-          {status.addresses.length > 0 && status.peerId && (
+          {status.addresses.length > 0 && status.peerId && getShareableAddress(status.addresses) && (
             <div className="peer-id-row">
               <label>Connect Multiaddr (share this):</label>
               <div className="copyable-field">
-                <code className="multiaddr">{status.addresses[0]}/p2p/{status.peerId}</code>
+                <code className="multiaddr">{getShareableAddress(status.addresses)}/p2p/{status.peerId}</code>
                 <button
                   className="copy-button"
-                  onClick={() => copyToClipboard(`${status.addresses[0]}/p2p/${status.peerId}`, 'multiaddr')}
+                  onClick={() => copyToClipboard(`${getShareableAddress(status.addresses)}/p2p/${status.peerId}`, 'multiaddr')}
                   title="Copy Multiaddr"
                 >
                   {copied === 'multiaddr' ? '✓' : 'Copy'}

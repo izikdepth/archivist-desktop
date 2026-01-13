@@ -247,7 +247,7 @@ function Settings() {
             />
           </div>
           <div className="setting-item">
-            <label>P2P Port</label>
+            <label>P2P Port (TCP/UDP)</label>
             <input
               type="number"
               value={config.node.p2p_port}
@@ -260,6 +260,7 @@ function Settings() {
               min={1024}
               max={65535}
             />
+            <span className="hint">Open this port in your firewall for peer connections</span>
           </div>
         </div>
         <div className="setting-item">
