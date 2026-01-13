@@ -76,6 +76,7 @@ pub fn run() {
             commands::pin_file,
             commands::get_file,
             commands::check_node_connection,
+            commands::get_file_info_by_cid,
             // Sync commands
             commands::get_sync_status,
             commands::add_watch_folder,

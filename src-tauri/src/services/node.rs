@@ -277,7 +277,14 @@ impl NodeService {
     }
 
     /// Get current node status with updated uptime
-    pub fn get_status(&self) -> NodeStatus {
+    /// Note: This method checks if the process is still alive and updates status accordingly
+    pub fn get_status(&mut self) -> NodeStatus {
+        // Check if process is still alive when status claims to be running
+        if self.status.state == NodeState::Running && !self.is_process_alive() {
+            log::warn!("get_status: detected dead process, marking as terminated");
+            self.mark_terminated(Some("Process died unexpectedly".into()));
+        }
+
         let mut status = self.status.clone();
 
         // Calculate uptime if running
@@ -306,6 +313,16 @@ impl NodeService {
             return Ok(false);
         }
 
+        // First check if the process is actually alive
+        if !self.is_process_alive() {
+            log::warn!(
+                "Health check: process PID {} is no longer running",
+                self.status.pid.unwrap_or(0)
+            );
+            self.mark_terminated(Some("Process died unexpectedly".into()));
+            return Ok(false);
+        }
+
         // Use the debug/info endpoint to check node health and get peer info
         let api_url = format!(
             "http://127.0.0.1:{}/api/archivist/v1/debug/info",
@@ -320,6 +337,8 @@ impl NodeService {
         {
             Ok(response) if response.status().is_success() => {
                 log::debug!("Node health check passed");
+                // Clear any previous error on successful health check
+                self.status.last_error = None;
                 // Try to parse the response to get peer info
                 if let Ok(info) = response.json::<NodeInfoResponse>().await {
                     self.status.peer_id = Some(info.id);
@@ -338,9 +357,12 @@ impl NodeService {
                 Ok(false)
             }
             Err(e) => {
-                // Connection refused is expected if the node hasn't started its HTTP server yet
+                // Connection refused or timeout is expected if the node hasn't started its HTTP server yet
+                // Don't set last_error for these transient issues
                 if e.is_connect() {
                     log::debug!("Node health check: connection refused (may still be starting)");
+                } else if e.is_timeout() {
+                    log::debug!("Node health check: timeout (may still be starting)");
                 } else {
                     log::warn!("Node health check error: {}", e);
                     self.status.last_error = Some(format!("Health check error: {}", e));
@@ -350,9 +372,28 @@ impl NodeService {
         }
     }
 
-    /// Check if the process is still alive
+    /// Check if the process is still alive by verifying the PID exists
     pub fn is_process_alive(&self) -> bool {
-        self.process_state.is_some() && self.status.state == NodeState::Running
+        if self.process_state.is_none() || self.status.state != NodeState::Running {
+            return false;
+        }
+
+        // Actually verify the process exists at the OS level
+        if let Some(pid) = self.status.pid {
+            // Check if /proc/<pid> exists (Linux) or use kill(pid, 0) to check
+            #[cfg(unix)]
+            {
+                // kill with signal 0 checks if process exists without sending a signal
+                unsafe { libc::kill(pid as i32, 0) == 0 }
+            }
+            #[cfg(not(unix))]
+            {
+                // On non-Unix, fall back to checking process_state
+                true
+            }
+        } else {
+            false
+        }
     }
 
     /// Handle unexpected process termination

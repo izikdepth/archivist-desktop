@@ -414,7 +414,7 @@ impl SyncService {
         log::info!("Scanning folder: {}", folder.path);
 
         let path = Path::new(&folder.path);
-        let files = self.collect_files(path)?;
+        let files = Self::collect_files(path)?;
 
         // Update folder stats
         if let Some(f) = self.folders.get_mut(folder_id) {
@@ -433,7 +433,7 @@ impl SyncService {
     }
 
     /// Collect all files in a directory recursively
-    fn collect_files(&self, dir: &Path) -> Result<Vec<PathBuf>> {
+    fn collect_files(dir: &Path) -> Result<Vec<PathBuf>> {
         let mut files = Vec::new();
 
         if !dir.is_dir() {
@@ -456,7 +456,7 @@ impl SyncService {
             }
 
             if path.is_dir() {
-                files.extend(self.collect_files(&path)?);
+                files.extend(Self::collect_files(&path)?);
             } else if path.is_file() {
                 files.push(path);
             }
@@ -467,7 +467,7 @@ impl SyncService {
 
     /// Get folder stats
     fn scan_folder_stats(&self, path: &Path) -> Result<(u32, u64)> {
-        let files = self.collect_files(path)?;
+        let files = Self::collect_files(path)?;
         let total_size: u64 = files
             .iter()
             .filter_map(|p| std::fs::metadata(p).ok())

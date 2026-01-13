@@ -51,6 +51,10 @@ mime_guess = "2.0"
 reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }
 urlencoding = "2.1"
 
+# Encoding
+base64 = "0.22"
+bs58 = "0.5"
+
 # Error handling
 thiserror = "1.0"
 anyhow = "1.0"
@@ -60,6 +64,10 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 
 # Date/time
 chrono = { version = "0.4", features = ["serde"] }
+
+# Unix process management
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 # Configuration
 config = "0.14"

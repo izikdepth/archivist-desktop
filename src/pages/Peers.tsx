@@ -9,12 +9,10 @@ function Peers() {
     connectPeer,
     disconnectPeer,
     removePeer,
-    copySpr,
     refreshPeers,
   } = usePeers();
 
   const [connectInput, setConnectInput] = useState('');
-  const [copied, setCopied] = useState(false);
 
   const handleConnect = async () => {
     if (!connectInput.trim()) return;
@@ -25,12 +23,6 @@ function Peers() {
     } catch {
       // Error is handled by the hook
     }
-  };
-
-  const handleCopySpr = async () => {
-    await copySpr();
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   const formatBytes = (bytes: number) => {
@@ -65,23 +57,19 @@ function Peers() {
           </div>
           {peerList.localAddresses.length > 0 && (
             <div className="node-addresses">
-              <span className="label">Addresses:</span>
+              <span className="label">Share this multiaddr to connect:</span>
               <ul>
                 {peerList.localAddresses.map((addr, i) => (
-                  <li key={i}><code>{addr}</code></li>
+                  <li key={i}>
+                    <code className="copyable" onClick={() => {
+                      const fullAddr = `${addr}/p2p/${peerList.localPeerId}`;
+                      navigator.clipboard.writeText(fullAddr);
+                    }}>
+                      {addr}/p2p/{peerList.localPeerId?.slice(0, 10)}...
+                    </code>
+                  </li>
                 ))}
               </ul>
-            </div>
-          )}
-          {peerList.spr && (
-            <div className="spr-section">
-              <span className="label">Share your SPR:</span>
-              <div className="spr-container">
-                <code className="spr">{peerList.spr.slice(0, 60)}...</code>
-                <button className="small" onClick={handleCopySpr}>
-                  {copied ? 'Copied!' : 'Copy SPR'}
-                </button>
-              </div>
             </div>
           )}
         </div>
@@ -90,10 +78,13 @@ function Peers() {
       {/* Connect to Peer */}
       <div className="connect-peer">
         <h3>Connect to Peer</h3>
+        <p className="help-text">
+          Enter a multiaddr to connect: <code>/ip4/IP/tcp/PORT/p2p/PEER_ID</code>
+        </p>
         <div className="input-group">
           <input
             type="text"
-            placeholder="Enter Peer ID, SPR, or multiaddr"
+            placeholder="/ip4/192.168.1.100/tcp/8090/p2p/16Uiu2HAm..."
             value={connectInput}
             onChange={(e) => setConnectInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleConnect()}

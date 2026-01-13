@@ -31,6 +31,8 @@ function Files() {
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [nodeConnected, setNodeConnected] = useState(false);
+  const [downloadCid, setDownloadCid] = useState('');
+  const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
 
   const checkNodeConnection = useCallback(async () => {
     try {
@@ -122,6 +124,64 @@ function Files() {
     }
   };
 
+  const handleDownloadByCid = async () => {
+    if (!downloadCid.trim()) {
+      setError('Please enter a CID');
+      return;
+    }
+
+    const cid = downloadCid.trim();
+
+    try {
+      setLoading(true);
+      setError(null);
+      setDownloadStatus('Fetching file info...');
+
+      // Try to get file metadata (filename, mimetype) from the network
+      let defaultFilename = `downloaded-${cid.slice(0, 12)}`;
+      try {
+        const fileInfo = await invoke<{ filename?: string; mimetype?: string } | null>(
+          'get_file_info_by_cid',
+          { cid }
+        );
+        if (fileInfo?.filename) {
+          defaultFilename = fileInfo.filename;
+        }
+      } catch {
+        // If we can't get file info, use the default filename
+        console.log('Could not fetch file info, using default filename');
+      }
+
+      const savePath = await save({
+        title: 'Save downloaded file as',
+        defaultPath: defaultFilename,
+      });
+
+      if (!savePath) {
+        setLoading(false);
+        setDownloadStatus(null);
+        return;
+      }
+
+      setDownloadStatus(`Downloading ${defaultFilename}...`);
+
+      await invoke('download_file', { cid, destination: savePath });
+
+      setDownloadStatus(`Downloaded: ${defaultFilename}`);
+      setDownloadCid('');
+      await loadFiles();
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setDownloadStatus(null), 3000);
+    } catch (e) {
+      const msg = typeof e === 'string' ? e : (e instanceof Error ? e.message : 'Failed to download file');
+      setError(`Download failed: ${msg}`);
+      setDownloadStatus(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDelete = async (cid: string) => {
     if (!confirm('Remove this file from your local cache?')) return;
 
@@ -188,6 +248,25 @@ function Files() {
       {error && <div className="error-banner">{error}</div>}
       {uploadProgress && <div className="info-banner">{uploadProgress}</div>}
 
+      {/* Download by CID section */}
+      <div className="download-by-cid">
+        <h3>Download by CID</h3>
+        <p>Enter a CID to download a file from the P2P network:</p>
+        <div className="cid-input-row">
+          <input
+            type="text"
+            value={downloadCid}
+            onChange={(e) => setDownloadCid(e.target.value)}
+            placeholder="zDvZRwzm..."
+            disabled={loading || !nodeConnected}
+          />
+          <button onClick={handleDownloadByCid} disabled={loading || !nodeConnected || !downloadCid.trim()}>
+            Download
+          </button>
+        </div>
+        {downloadStatus && <div className="info-banner">{downloadStatus}</div>}
+      </div>
+
       <div className="file-stats">
         <span>{files.length} files</span>
         <span>{formatBytes(totalSize)} total</span>
@@ -221,9 +300,9 @@ function Files() {
                     <span className="file-name">{file.name}</span>
                     {file.isPinned && <span className="pin-badge" title="Pinned">📌</span>}
                   </td>
-                  <td>
-                    <code className="cid" title={file.cid}>
-                      {file.cid.length > 20 ? `${file.cid.slice(0, 20)}...` : file.cid}
+                  <td className="cid-cell">
+                    <code className="cid" title={`Click to copy: ${file.cid}`} onClick={() => handleCopyCid(file.cid)}>
+                      {file.cid}
                     </code>
                   </td>
                   <td>{formatBytes(file.sizeBytes)}</td>

@@ -149,7 +149,7 @@ impl FileService {
                             size_bytes: item
                                 .manifest
                                 .as_ref()
-                                .and_then(|m| m.upload_bytes)
+                                .and_then(|m| m.dataset_size)
                                 .unwrap_or(0),
                             mime_type: item.manifest.as_ref().and_then(|m| m.mimetype.clone()),
                             uploaded_at: Utc::now(),
@@ -371,6 +371,25 @@ impl FileService {
     /// Check if node API is reachable
     pub async fn check_node_connection(&self) -> bool {
         self.api_client.health_check().await.unwrap_or(false)
+    }
+
+    /// Get file info by CID from the node API
+    /// Used for Download by CID to get original filename/mimetype
+    pub async fn get_file_info_by_cid(
+        &self,
+        cid: &str,
+    ) -> Result<Option<crate::commands::files::FileMetadata>> {
+        match self.api_client.get_file_info(cid).await {
+            Ok(Some(manifest)) => Ok(Some(crate::commands::files::FileMetadata {
+                filename: manifest.filename,
+                mimetype: manifest.mimetype,
+            })),
+            Ok(None) => Ok(None),
+            Err(e) => {
+                log::warn!("Failed to get file info for CID {}: {}", cid, e);
+                Ok(None)
+            }
+        }
     }
 }
 

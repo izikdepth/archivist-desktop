@@ -206,6 +206,21 @@ function Dashboard() {
               </button>
             </div>
           </div>
+          {status.addresses.length > 0 && status.peerId && (
+            <div className="peer-id-row">
+              <label>Connect Multiaddr (share this):</label>
+              <div className="copyable-field">
+                <code className="multiaddr">{status.addresses[0]}/p2p/{status.peerId}</code>
+                <button
+                  className="copy-button"
+                  onClick={() => copyToClipboard(`${status.addresses[0]}/p2p/${status.peerId}`, 'multiaddr')}
+                  title="Copy Multiaddr"
+                >
+                  {copied === 'multiaddr' ? '✓' : 'Copy'}
+                </button>
+              </div>
+            </div>
+          )}
           {status.spr && (
             <div className="peer-id-row">
               <label>SPR (for connecting):</label>

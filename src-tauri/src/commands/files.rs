@@ -55,3 +55,22 @@ pub async fn check_node_connection(state: State<'_, AppState>) -> Result<bool> {
     let files = state.files.read().await;
     Ok(files.check_node_connection().await)
 }
+
+/// Get file info by CID from the node (for Download by CID feature)
+/// Returns filename and mimetype if available
+#[tauri::command]
+pub async fn get_file_info_by_cid(
+    state: State<'_, AppState>,
+    cid: String,
+) -> Result<Option<FileMetadata>> {
+    let files = state.files.read().await;
+    files.get_file_info_by_cid(&cid).await
+}
+
+/// File metadata returned from get_file_info_by_cid
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileMetadata {
+    pub filename: Option<String>,
+    pub mimetype: Option<String>,
+}

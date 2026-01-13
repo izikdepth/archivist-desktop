@@ -73,7 +73,7 @@ pub struct ManifestInfo {
     #[serde(default)]
     pub mimetype: Option<String>,
     #[serde(default)]
-    pub upload_bytes: Option<u64>,
+    pub dataset_size: Option<u64>,
     #[serde(default)]
     pub protected: Option<bool>,
 }
@@ -172,6 +172,20 @@ impl NodeApiClient {
             .json::<DataListResponse>()
             .await
             .map_err(|e| ArchivistError::ApiError(format!("Failed to parse data list: {}", e)))
+    }
+
+    /// Get file info by CID (looks up in local data list)
+    /// Returns the manifest info if the file exists locally
+    pub async fn get_file_info(&self, cid: &str) -> Result<Option<ManifestInfo>> {
+        let data = self.list_data().await?;
+
+        for item in data.content {
+            if item.cid == cid {
+                return Ok(item.manifest);
+            }
+        }
+
+        Ok(None)
     }
 
     /// Upload a file to the node
@@ -337,6 +351,10 @@ impl NodeApiClient {
     }
 
     /// Connect to a peer by multiaddr
+    ///
+    /// Note: The archivist-node API uses GET for the connect endpoint.
+    /// If addrs is provided, it will be used to dial the peer directly.
+    /// Otherwise, peer discovery will be used to find the peer.
     pub async fn connect_peer(&self, peer_id: &str, multiaddr: &str) -> Result<()> {
         let url = format!(
             "{}/api/archivist/v1/connect/{}?addrs={}",
@@ -346,14 +364,16 @@ impl NodeApiClient {
         );
 
         let response =
-            self.client.post(&url).send().await.map_err(|e| {
+            self.client.get(&url).send().await.map_err(|e| {
                 ArchivistError::ApiError(format!("Failed to connect to peer: {}", e))
             })?;
 
         if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
             return Err(ArchivistError::ApiError(format!(
-                "Failed to connect to peer: HTTP {}",
-                response.status()
+                "Failed to connect to peer: HTTP {} - {}",
+                status, body
             )));
         }
 
