@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use tauri::AppHandle;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, mpsc, RwLock};
 
 /// Node running status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -142,6 +142,11 @@ impl NodeService {
 
     /// Start the archivist-node sidecar
     pub async fn start(&mut self, app_handle: &AppHandle) -> Result<()> {
+        self.start_internal(app_handle, false).await
+    }
+
+    /// Internal start method with retry capability
+    async fn start_internal(&mut self, app_handle: &AppHandle, is_retry: bool) -> Result<()> {
         if self.status.state == NodeState::Running || self.status.state == NodeState::Starting {
             return Err(ArchivistError::NodeAlreadyRunning);
         }
@@ -194,6 +199,10 @@ impl NodeService {
         let (shutdown_tx, _) = broadcast::channel(1);
         self.shutdown_tx = Some(shutdown_tx);
 
+        // Create channel to detect recoverable errors
+        let (error_tx, mut error_rx) = mpsc::channel::<String>(10);
+        let data_dir_clone = self.config.data_dir.clone();
+
         // Spawn task to handle stdout/stderr from the sidecar
         tokio::spawn(async move {
             while let Some(event) = rx.recv().await {
@@ -201,10 +210,18 @@ impl NodeService {
                     CommandEvent::Stdout(line) => {
                         let line_str = String::from_utf8_lossy(&line);
                         log::info!("[archivist-node] {}", line_str.trim());
+                        // Check for recoverable errors
+                        if line_str.contains("Should create discovery datastore!") {
+                            let _ = error_tx.send("discovery_datastore_error".to_string()).await;
+                        }
                     }
                     CommandEvent::Stderr(line) => {
                         let line_str = String::from_utf8_lossy(&line);
                         log::warn!("[archivist-node] {}", line_str.trim());
+                        // Check for recoverable errors in stderr too
+                        if line_str.contains("Should create discovery datastore!") {
+                            let _ = error_tx.send("discovery_datastore_error".to_string()).await;
+                        }
                     }
                     CommandEvent::Error(e) => {
                         log::error!("[archivist-node] Error: {}", e);
@@ -222,6 +239,50 @@ impl NodeService {
             }
         });
 
+        // If this is not already a retry, check for recoverable errors in the first few seconds
+        if !is_retry {
+            let data_dir_for_recovery = data_dir_clone;
+
+            tokio::spawn(async move {
+                // Wait a short time for potential errors
+                tokio::select! {
+                    Some(error_type) = error_rx.recv() => {
+                        if error_type == "discovery_datastore_error" {
+                            log::warn!("Detected corrupted discovery datastore, attempting auto-recovery...");
+
+                            // Clear the data directory
+                            let data_path = std::path::Path::new(&data_dir_for_recovery);
+                            if data_path.exists() {
+                                if let Err(e) = std::fs::remove_dir_all(data_path) {
+                                    log::error!("Failed to clear data directory for recovery: {}", e);
+                                    return;
+                                }
+                                log::info!("Cleared corrupted data directory: {}", data_dir_for_recovery);
+                            }
+
+                            log::info!("Data directory cleared. Node will auto-restart via health monitor.");
+                        }
+                    }
+                    _ = tokio::time::sleep(Duration::from_secs(5)) => {
+                        // No error detected within 5 seconds, node started successfully
+                    }
+                }
+            });
+        }
+
+        Ok(())
+    }
+
+    /// Clear the node data directory (for recovery from corruption)
+    #[allow(dead_code)]
+    pub fn clear_data_directory(&self) -> Result<()> {
+        let data_path = std::path::Path::new(&self.config.data_dir);
+        if data_path.exists() {
+            std::fs::remove_dir_all(data_path).map_err(|e| {
+                ArchivistError::ConfigError(format!("Failed to clear data directory: {}", e))
+            })?;
+            log::info!("Cleared node data directory: {}", self.config.data_dir);
+        }
         Ok(())
     }
 
