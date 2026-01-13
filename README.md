@@ -78,6 +78,31 @@ Settings are stored in:
 - **macOS**: `~/Library/Application Support/archivist/config.toml`
 - **Windows**: `%APPDATA%\archivist\config.toml`
 
+## Network Setup
+
+To connect with peers on your local network, you need to open the P2P port (default: 8090) in your firewall.
+
+### Linux (UFW)
+
+```bash
+sudo ufw allow 8090/tcp
+sudo ufw allow 8090/udp
+```
+
+### macOS
+
+The firewall will prompt you to allow connections when the app first runs. Click "Allow" to enable P2P connectivity.
+
+### Windows
+
+```powershell
+# Run as Administrator
+netsh advfirewall firewall add rule name="Archivist P2P" dir=in action=allow protocol=tcp localport=8090
+netsh advfirewall firewall add rule name="Archivist P2P UDP" dir=in action=allow protocol=udp localport=8090
+```
+
+If you change the P2P port in Settings, update your firewall rules accordingly.
+
 ## License
 
 MIT
