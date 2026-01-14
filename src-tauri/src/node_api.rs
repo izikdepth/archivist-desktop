@@ -277,29 +277,34 @@ impl NodeApiClient {
     }
 
     /// Download a file by CID from the network (if not available locally)
+    ///
+    /// This uses POST to request the network download, which fetches the file
+    /// from connected peers and stores it locally. Then we download from local.
     pub async fn download_file_network(&self, cid: &str) -> Result<Vec<u8>> {
-        let url = format!("{}/api/archivist/v1/data/{}/network", self.base_url, cid);
+        // First, request the file from the network (POST triggers async download)
+        let request_url = format!("{}/api/archivist/v1/data/{}/network", self.base_url, cid);
 
         let response = self
             .client
-            .get(&url)
+            .post(&request_url)
             .timeout(Duration::from_secs(600)) // 10 min for network downloads
             .send()
             .await
-            .map_err(|e| ArchivistError::ApiError(format!("Network download failed: {}", e)))?;
+            .map_err(|e| {
+                ArchivistError::ApiError(format!("Network download request failed: {}", e))
+            })?;
 
         if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
             return Err(ArchivistError::ApiError(format!(
-                "Network download failed: HTTP {}",
-                response.status()
+                "Network download failed: HTTP {} - {}",
+                status, body
             )));
         }
 
-        response
-            .bytes()
-            .await
-            .map(|b| b.to_vec())
-            .map_err(|e| ArchivistError::ApiError(format!("Failed to read download: {}", e)))
+        // Now download from local storage (the POST should have fetched it)
+        self.download_file(cid).await
     }
 
     /// Get the Signed Peer Record for this node
