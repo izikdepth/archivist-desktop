@@ -38,3 +38,14 @@ src-tauri/.cargo/
 # Lock files (optional - some prefer to commit these)
 # pnpm-lock.yaml
 # Cargo.lock
+
+# Redundant documentation (consolidated into CLAUDE.md)
+ARCHIVIST-NODE-API.md
+P2P-TESTING-GUIDE.md
+P2P-TESTING-SUMMARY.md
+WINDOWS-TESTING.md
+CICD-CONTEXT.md
+SETUP_COMPLETE.md
+TEST-DIAGNOSTICS.md
+release-progress.md
+.github/CICD_SETUP.md
