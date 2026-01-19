@@ -42,6 +42,7 @@ pub struct NodeSettings {
     pub listen_port: u16,    // TCP port for P2P connections
     pub max_storage_gb: u32,
     pub auto_start: bool,
+    pub log_level: String, // Log level: TRACE, DEBUG, INFO, NOTICE, WARN, ERROR, FATAL
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,6 +98,7 @@ impl Default for AppConfig {
                 listen_port: 8070,    // Default TCP port for P2P connections
                 max_storage_gb: 10,
                 auto_start: true,
+                log_level: "DEBUG".to_string(), // Good balance of verbosity for debugging
             },
             sync: SyncSettings {
                 auto_sync: true,

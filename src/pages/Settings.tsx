@@ -10,6 +10,7 @@ interface NodeSettings {
   listen_port: number;    // TCP port for P2P connections
   max_storage_gb: number;
   auto_start: boolean;
+  log_level: string;      // TRACE, DEBUG, INFO, NOTICE, WARN, ERROR, FATAL
 }
 
 interface SyncSettings {
@@ -49,6 +50,7 @@ const defaultConfig: AppConfig = {
     listen_port: 8070,
     max_storage_gb: 10,
     auto_start: true,
+    log_level: 'DEBUG',
   },
   sync: {
     auto_sync: true,
@@ -312,6 +314,27 @@ function Settings() {
             max={10000}
           />
           <span className="hint">Maximum disk space the node can use</span>
+        </div>
+        <div className="setting-item">
+          <label>Log Level</label>
+          <select
+            value={config.node.log_level}
+            onChange={(e) =>
+              setConfig((prev) => ({
+                ...prev,
+                node: { ...prev.node, log_level: e.target.value },
+              }))
+            }
+          >
+            <option value="TRACE">TRACE - Most verbose (debugging)</option>
+            <option value="DEBUG">DEBUG - Detailed (recommended)</option>
+            <option value="INFO">INFO - Informational</option>
+            <option value="NOTICE">NOTICE - Normal but significant</option>
+            <option value="WARN">WARN - Warnings only</option>
+            <option value="ERROR">ERROR - Errors only</option>
+            <option value="FATAL">FATAL - Critical errors only</option>
+          </select>
+          <span className="hint">Verbosity of node logs. Restart node to apply changes.</span>
         </div>
         <div className="setting-item">
           <label>

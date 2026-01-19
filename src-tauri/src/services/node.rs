@@ -73,6 +73,7 @@ pub struct NodeConfig {
     pub auto_restart: bool,
     pub max_restart_attempts: u32,
     pub health_check_interval_secs: u64,
+    pub log_level: String, // Log level: TRACE, DEBUG, INFO, NOTICE, WARN, ERROR, FATAL
 }
 
 impl Default for NodeConfig {
@@ -93,6 +94,7 @@ impl Default for NodeConfig {
             auto_restart: true,
             max_restart_attempts: 3,
             health_check_interval_secs: 30,
+            log_level: "DEBUG".to_string(), // Good balance for debugging
         }
     }
 }
@@ -110,6 +112,7 @@ impl NodeConfig {
             auto_restart: true,
             max_restart_attempts: 3,
             health_check_interval_secs: 30,
+            log_level: settings.log_level.clone(),
         }
     }
 }
@@ -281,6 +284,25 @@ impl NodeService {
 
         if ready {
             self.status.state = NodeState::Running;
+
+            // Set log level via API
+            let log_level_url = format!(
+                "http://127.0.0.1:{}/api/archivist/v1/debug/chronicles/loglevel?level={}",
+                self.config.api_port, self.config.log_level
+            );
+            log::info!("Setting node log level to: {}", self.config.log_level);
+            match client.post(&log_level_url).send().await {
+                Ok(response) if response.status().is_success() => {
+                    log::info!("Log level set successfully");
+                }
+                Ok(response) => {
+                    log::warn!("Failed to set log level, status: {}", response.status());
+                }
+                Err(e) => {
+                    log::warn!("Failed to set log level: {}", e);
+                }
+            }
+
             // Emit event for sound notification
             let _ = app_handle.emit("node-started", ());
         } else {
