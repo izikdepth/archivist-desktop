@@ -725,6 +725,21 @@ tr:hover td {
   font-size: 0.875rem;
 }
 
+/* CID Input Validation States */
+.cid-input-row input.cid-input-valid {
+  border-color: var(--color-success);
+}
+
+.cid-input-row input.cid-input-invalid {
+  border-color: var(--color-error);
+}
+
+.cid-validation-error {
+  font-size: 0.75rem;
+  color: var(--color-error);
+  margin-top: var(--spacing-xs);
+}
+
 .file-stats {
   display: flex;
   gap: var(--spacing-lg);

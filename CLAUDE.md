@@ -1249,6 +1249,18 @@ Sidecar binaries include SHA256 checksum verification in download script.
 - Folder watching and sync
 - System tray integration
 - Auto-update support
+- **Feature:** Sound notifications for node events (startup, peer connect, download)
+  - Configurable in Settings with volume control and per-event toggles
+  - Uses Web Audio API for cross-platform compatibility
+- **Feature:** Auto-trigger file download on CID paste
+  - Paste CID into download field to automatically prompt for save location
+  - Real-time CID validation with visual feedback (green/red border)
+  - Smart debouncing (300ms) to prevent accidental triggers
+  - Manual download button remains as fallback
+- **Fixed:** Windows file locking error (os error 32) when viewing logs
+  - Uses FILE_SHARE_READ | FILE_SHARE_WRITE on Windows for log file access
+- **Added:** Architecture diagram to README.md
+- **Added:** Comprehensive documentation in CLAUDE.md
 
 ---
 

@@ -1,6 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
+import { validateCid, type CidValidationResult } from '../lib/cidValidation';
 
 interface FileInfo {
   cid: string;
@@ -33,6 +34,9 @@ function Files() {
   const [nodeConnected, setNodeConnected] = useState(false);
   const [downloadCid, setDownloadCid] = useState('');
   const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
+  const [cidValidation, setCidValidation] = useState<CidValidationResult | null>(null);
+  const [autoDownloadPending, setAutoDownloadPending] = useState(false);
+  const autoDownloadTimerRef = useRef<number | null>(null);
 
   const checkNodeConnection = useCallback(async () => {
     try {
@@ -69,6 +73,15 @@ function Files() {
 
     return () => clearInterval(interval);
   }, [checkNodeConnection, loadFiles]);
+
+  // Cleanup auto-download timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoDownloadTimerRef.current) {
+        window.clearTimeout(autoDownloadTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleUpload = async () => {
     try {
@@ -124,11 +137,19 @@ function Files() {
     }
   };
 
-  const handleDownloadByCid = async () => {
+  const handleDownloadByCid = useCallback(async () => {
+    // Prevent double-trigger
+    if (loading) {
+      return;
+    }
+
     if (!downloadCid.trim()) {
       setError('Please enter a CID');
       return;
     }
+
+    // Clear pending state
+    setAutoDownloadPending(false);
 
     const cid = downloadCid.trim();
 
@@ -169,6 +190,7 @@ function Files() {
 
       setDownloadStatus(`Downloaded: ${defaultFilename}`);
       setDownloadCid('');
+      setCidValidation(null);
       await loadFiles();
 
       // Clear success message after 3 seconds
@@ -180,7 +202,61 @@ function Files() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [downloadCid, loading, loadFiles]);
+
+  const handleCidPaste = useCallback(
+    async (e: React.ClipboardEvent<HTMLInputElement>) => {
+      // Clear any pending auto-download
+      if (autoDownloadTimerRef.current) {
+        window.clearTimeout(autoDownloadTimerRef.current);
+        autoDownloadTimerRef.current = null;
+      }
+
+      const pastedText = e.clipboardData.getData('text');
+      const validation = validateCid(pastedText);
+      setCidValidation(validation);
+
+      if (!validation.valid) {
+        return; // Don't auto-trigger on invalid CID
+      }
+
+      if (!nodeConnected) {
+        setError('Node is not connected. Start the node to download files.');
+        return;
+      }
+
+      // Schedule auto-download after short delay
+      setAutoDownloadPending(true);
+      autoDownloadTimerRef.current = window.setTimeout(async () => {
+        setAutoDownloadPending(false);
+        // Check CID hasn't changed since paste
+        if (downloadCid.trim() === pastedText.trim()) {
+          await handleDownloadByCid();
+        }
+        autoDownloadTimerRef.current = null;
+      }, 300); // 300ms delay
+    },
+    [downloadCid, nodeConnected, handleDownloadByCid]
+  );
+
+  const handleCidChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setDownloadCid(value);
+
+    // Cancel pending auto-download if user edits
+    if (autoDownloadTimerRef.current) {
+      window.clearTimeout(autoDownloadTimerRef.current);
+      autoDownloadTimerRef.current = null;
+      setAutoDownloadPending(false);
+    }
+
+    // Validate for visual feedback
+    if (value.trim().length > 0) {
+      setCidValidation(validateCid(value));
+    } else {
+      setCidValidation(null);
+    }
+  }, []);
 
   const handleDelete = async (cid: string) => {
     if (!confirm('Remove this file from your local cache?')) return;
@@ -256,14 +332,26 @@ function Files() {
           <input
             type="text"
             value={downloadCid}
-            onChange={(e) => setDownloadCid(e.target.value)}
-            placeholder="zDvZRwzm..."
-            disabled={loading || !nodeConnected}
+            onChange={handleCidChange}
+            onPaste={handleCidPaste}
+            placeholder="zDvZRwzm... (paste CID to auto-download)"
+            disabled={loading || !nodeConnected || autoDownloadPending}
+            className={
+              cidValidation
+                ? cidValidation.valid ? 'cid-input-valid' : 'cid-input-invalid'
+                : ''
+            }
           />
-          <button onClick={handleDownloadByCid} disabled={loading || !nodeConnected || !downloadCid.trim()}>
-            Download
+          <button
+            onClick={handleDownloadByCid}
+            disabled={loading || !nodeConnected || !downloadCid.trim() || autoDownloadPending}
+          >
+            {autoDownloadPending ? 'Preparing...' : 'Download'}
           </button>
         </div>
+        {cidValidation && !cidValidation.valid && (
+          <div className="cid-validation-error">{cidValidation.error}</div>
+        )}
         {downloadStatus && <div className="info-banner">{downloadStatus}</div>}
       </div>
 
