@@ -35,7 +35,8 @@ pub enum Theme {
 pub struct NodeSettings {
     pub data_directory: String,
     pub api_port: u16,
-    pub p2p_port: u16,
+    pub discovery_port: u16, // UDP port for DHT/mDNS discovery
+    pub listen_port: u16,    // TCP port for P2P connections
     pub max_storage_gb: u32,
     pub auto_start: bool,
 }
@@ -79,8 +80,9 @@ impl Default for AppConfig {
             start_on_boot: false,
             node: NodeSettings {
                 data_directory: data_dir,
-                api_port: 8080, // Default archivist-node API port
-                p2p_port: 8090, // Default archivist-node discovery port
+                api_port: 8080,       // Default archivist-node API port
+                discovery_port: 8090, // Default UDP port for DHT/mDNS discovery
+                listen_port: 8070,    // Default TCP port for P2P connections
                 max_storage_gb: 10,
                 auto_start: true,
             },

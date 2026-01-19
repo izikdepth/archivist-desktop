@@ -59,10 +59,15 @@ export function usePeers() {
 
   const connectPeer = useCallback(async (address: string) => {
     try {
+      console.log('[usePeers] Attempting to connect to peer:', address);
       setError(null);
+      console.log('[usePeers] Invoking connect_peer command...');
       await invoke('connect_peer', { address });
+      console.log('[usePeers] connect_peer succeeded, refreshing peers...');
       await refreshPeers();
+      console.log('[usePeers] Peer connection complete');
     } catch (e) {
+      console.error('[usePeers] connect_peer failed:', e);
       const msg = typeof e === 'string' ? e : (e instanceof Error ? e.message : 'Failed to connect to peer');
       setError(msg);
       throw e;

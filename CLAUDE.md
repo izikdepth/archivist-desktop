@@ -60,6 +60,7 @@ archivist-desktop/
 │   │   ├── Files.tsx            # Upload/download/list files
 │   │   ├── Sync.tsx             # Watched folder management
 │   │   ├── Peers.tsx            # P2P network view
+│   │   ├── Logs.tsx             # Node logs viewer
 │   │   └── Settings.tsx         # App configuration
 │   ├── lib/                      # Utilities and types
 │   │   ├── api.ts               # TypeScript interfaces
@@ -182,7 +183,7 @@ curl http://127.0.0.1:8080/api/archivist/v1/debug/info
 ```json
 {
   "id": "16Uiu2HAmXYZ...",
-  "addrs": ["/ip4/127.0.0.1/tcp/8090", "/ip4/192.168.0.1/tcp/8090"],
+  "addrs": ["/ip4/127.0.0.1/tcp/8070", "/ip4/192.168.0.1/tcp/8070"],
   "repo": "/home/user/.local/share/archivist/node",
   "spr": "spr:CiUIAhI...",
   "announceAddresses": [...],
@@ -265,6 +266,8 @@ const status = await invoke<NodeStatus>('get_node_status');
 | `get_node_status` | Get running state, PID, storage |
 | `run_node_diagnostics` | Run connectivity diagnostics |
 | `get_node_config` / `set_node_config` | Node configuration |
+| `get_node_logs` | Get last N lines of node logs |
+| `get_node_log_path` | Get path to node log file |
 | `list_files` | List stored files |
 | `upload_file` | Upload file to node |
 | `download_file` | Download file by CID |
@@ -312,7 +315,8 @@ const { marketplaceEnabled, zkProofsEnabled } = useFeatures();
 |-------|---------|-------------|
 | `data_dir` | `~/.local/share/archivist/node` | Node data directory |
 | `api_port` | `8080` | REST API port |
-| `p2p_port` | `8090` | P2P discovery port |
+| `discovery_port` | `8090` | UDP port for DHT/mDNS peer discovery |
+| `listen_port` | `8070` | TCP port for P2P connections |
 | `max_storage_bytes` | 10GB | Storage quota |
 | `auto_start` | `false` | Start node on app launch |
 | `auto_restart` | `true` | Restart on failure |
@@ -325,11 +329,111 @@ const { marketplaceEnabled, zkProofsEnabled } = useFeatures();
 | `interval_secs` | `30` | Sync check interval |
 | `batch_size` | `5` | Files per batch |
 
+### Port Architecture
+
+The application uses **two separate ports** for P2P networking:
+
+#### Discovery Port (UDP - Default: 8090)
+- **Purpose**: Peer discovery via DHT (Distributed Hash Table) and mDNS
+- **Protocol**: UDP
+- **Command-line flag**: `--disc-port=8090`
+- **Used for**: Finding other nodes on the network, announcing presence
+- **Configuration**: `discovery_port` in NodeConfig/NodeSettings
+
+#### Listen Port (TCP - Default: 8070)
+- **Purpose**: Actual P2P data connections and file transfers
+- **Protocol**: TCP
+- **Command-line flag**: `--listen-addrs=/ip4/0.0.0.0/tcp/8070`
+- **Used for**: Establishing connections, transferring files, syncing data
+- **Configuration**: `listen_port` in NodeConfig/NodeSettings
+
+#### Why Two Ports?
+
+1. **Protocol Separation**: UDP for lightweight discovery, TCP for reliable data transfer
+2. **Network Flexibility**: Some networks may treat UDP and TCP differently
+3. **Firewall Optimization**: Allows granular control over discovery vs data traffic
+4. **Port Forwarding**: Can forward only the listen port for direct connections while using discovery locally
+
+#### Multiaddr Format
+
+When connecting to peers, the multiaddr includes the **listen port** (TCP):
+```
+/ip4/192.168.1.100/tcp/8070/p2p/16Uiu2HAm...
+```
+
+The discovery port is not included in multiaddrs as it's used automatically by the DHT.
+
+#### Sidecar Startup
+
+The archivist-node sidecar receives both ports:
+```bash
+archivist \
+  --api-port=8080 \
+  --disc-port=8090 \
+  --listen-addrs=/ip4/0.0.0.0/tcp/8070 \
+  --nat=upnp
+```
+
 ### Config File Locations
 
 - **Linux**: `~/.config/archivist/config.toml`
 - **macOS**: `~/Library/Application Support/archivist/config.toml`
 - **Windows**: `%APPDATA%\archivist\config.toml`
+
+### Configuration Synchronization
+
+The application maintains two configuration structures that must stay synchronized:
+
+#### AppConfig (Persistent Storage)
+- **Location**: Saved to disk in `config.toml`
+- **Managed by**: `ConfigService` in `src-tauri/src/services/config.rs`
+- **Contains**: `NodeSettings` (user-configurable fields)
+- **Purpose**: Persists user preferences across app restarts
+
+#### NodeConfig (Runtime Configuration)
+- **Location**: In-memory in `NodeService`
+- **Managed by**: `NodeService` in `src-tauri/src/services/node.rs`
+- **Contains**: Full node configuration including runtime fields
+- **Purpose**: Active configuration used when starting the sidecar
+
+#### Synchronization Points
+
+1. **App Startup** ([src-tauri/src/state.rs](src-tauri/src/state.rs#L17-L30))
+   - `AppState::new()` loads `AppConfig` from disk via `ConfigService`
+   - Converts `NodeSettings` → `NodeConfig` using `NodeConfig::from_node_settings()`
+   - Initializes `NodeService` with the loaded configuration
+
+2. **Settings Save** ([src-tauri/src/commands/system.rs](src-tauri/src/commands/system.rs#L13-L32))
+   - `save_config()` command updates both:
+     - Saves `AppConfig` to disk (persistent)
+     - Syncs to `NodeService.config` (in-memory)
+   - Logs the synchronized configuration
+
+3. **Settings Reset** ([src-tauri/src/commands/system.rs](src-tauri/src/commands/system.rs#L36-L50))
+   - `reset_config()` resets both:
+     - Resets `AppConfig` to defaults on disk
+     - Syncs defaults to `NodeService`
+
+#### Configuration Flow Diagram
+
+```
+User Changes Settings in UI
+        ↓
+save_config(AppConfig)
+        ↓
+    ┌───────────────┬────────────────┐
+    ↓               ↓                ↓
+ConfigService  →  Disk        NodeService
+(update)      (config.toml)   (set_config)
+    ↓               ↓                ↓
+Persistent    File System    In-Memory Config
+Storage         Write          Used by Node
+                                 ↓
+                           Node Restart Required
+                           to Apply Changes
+```
+
+**Important**: Configuration changes require a node restart to take effect. The node uses the `NodeConfig` values captured at startup time.
 
 ## Development
 
@@ -665,10 +769,16 @@ A diagnostics panel is available on the Dashboard:
 
 ### Firewall Configuration
 
+Open **both ports** in your firewall for full P2P functionality:
+- **Port 8090 (UDP)**: Discovery/DHT
+- **Port 8070 (TCP)**: P2P connections
+
 #### Linux (UFW)
 ```bash
-sudo ufw allow 8090/tcp
+# Discovery port (UDP)
 sudo ufw allow 8090/udp
+# Listen port (TCP)
+sudo ufw allow 8070/tcp
 ```
 
 #### macOS
@@ -677,17 +787,22 @@ System Preferences → Security & Privacy → Firewall → Allow Archivist Deskt
 #### Windows
 ```powershell
 # Run as Administrator
-netsh advfirewall firewall add rule name="Archivist P2P" dir=in action=allow protocol=tcp localport=8090
-netsh advfirewall firewall add rule name="Archivist P2P UDP" dir=in action=allow protocol=udp localport=8090
+# Discovery port (UDP)
+netsh advfirewall firewall add rule name="Archivist Discovery" dir=in action=allow protocol=udp localport=8090
+# Listen port (TCP)
+netsh advfirewall firewall add rule name="Archivist P2P" dir=in action=allow protocol=tcp localport=8070
 ```
 
 ### Cross-Network Testing
 
 For internet connections, configure port forwarding on your router:
-1. Find your P2P port (default: 8090)
-2. Forward port 8090 to your machine's local IP
-3. Find your public IP: `curl ifconfig.me`
-4. Your multiaddr: `/ip4/YOUR_PUBLIC_IP/tcp/8090/p2p/YOUR_PEER_ID`
+1. Forward **both ports** to your machine's local IP:
+   - Port 8090 (UDP) - Discovery
+   - Port 8070 (TCP) - P2P connections
+2. Find your public IP: `curl ifconfig.me`
+3. Your multiaddr uses the **listen port** (TCP): `/ip4/YOUR_PUBLIC_IP/tcp/8070/p2p/YOUR_PEER_ID`
+
+**Note**: The multiaddr only includes the listen port (8070). The discovery port (8090) is used automatically by DHT and doesn't appear in multiaddrs.
 
 ### Diagnostic Commands
 
@@ -701,9 +816,11 @@ curl http://127.0.0.1:8080/api/archivist/v1/spr
 # List connected peers
 curl http://127.0.0.1:8080/api/archivist/v1/peers
 
-# Check if P2P port is open
-lsof -i :8090  # macOS/Linux
-netstat -ano | findstr "8090"  # Windows
+# Check if ports are open
+lsof -i :8070  # Listen port (TCP) - macOS/Linux
+lsof -i :8090  # Discovery port (UDP) - macOS/Linux
+netstat -ano | findstr "8070"  # Windows (listen)
+netstat -ano | findstr "8090"  # Windows (discovery)
 ```
 
 ### Common P2P Issues
@@ -807,6 +924,121 @@ cargo test --manifest-path src-tauri/Cargo.toml
 pnpm tauri build --debug
 ```
 
+## Logs and Debugging
+
+### Viewing Node Logs
+
+The application includes a built-in logs viewer to monitor archivist-node output in real-time.
+
+#### Accessing Logs
+
+Navigate to **Logs** in the sidebar to view node output. The logs page provides:
+
+- **Real-time viewing**: See stdout/stderr from the archivist-node sidecar
+- **Auto-refresh**: Optional automatic refresh every 2 seconds
+- **Line limit control**: View last 100, 500, 1000, or 5000 lines
+- **Search and copy**: Copy all logs to clipboard
+- **Scroll controls**: Quick navigation to bottom of logs
+
+#### Log File Location
+
+Logs are written to a file alongside the node data directory:
+
+```
+Linux:   ~/.local/share/archivist/node.log
+macOS:   ~/Library/Application Support/archivist/node.log
+Windows: %APPDATA%\archivist\node.log
+```
+
+The log path is displayed at the top of the Logs page.
+
+#### Sidecar Startup Flag
+
+When the node starts, the `--log-file` flag is automatically added:
+
+```rust
+// From src-tauri/src/services/node.rs
+let log_file = std::path::Path::new(&config.data_dir)
+    .parent()
+    .unwrap_or(std::path::Path::new(&config.data_dir))
+    .join("node.log");
+
+.args([
+    &format!("--data-dir={}", config.data_dir),
+    &format!("--api-port={}", config.api_port),
+    &format!("--disc-port={}", config.discovery_port),
+    &format!("--listen-addrs={}", listen_addr),
+    &format!("--storage-quota={}", config.max_storage_bytes),
+    &format!("--log-file={}", log_file_str),  // ← Log output flag
+    "--nat=upnp",
+])
+```
+
+#### Tauri Commands
+
+Two commands are available for log access:
+
+```typescript
+// Get last N lines of logs (default: 500)
+const logs = await invoke<string[]>('get_node_logs', { lines: 500 });
+
+// Get log file path
+const logPath = await invoke<string>('get_node_log_path');
+```
+
+#### Logs Page Features
+
+**Controls:**
+- **Lines dropdown**: Select how many recent lines to display (100, 500, 1000, 5000)
+- **Auto-refresh checkbox**: Enable continuous log updates every 2 seconds
+- **Auto-scroll checkbox**: Automatically scroll to bottom when new logs arrive
+- **Refresh button**: Manually reload logs
+- **Scroll to Bottom**: Jump to most recent logs (also re-enables auto-scroll)
+- **Copy All**: Copy all visible logs to clipboard
+- **Clear Display**: Clear the current view (doesn't delete file)
+
+**Auto-Scroll Behavior:**
+- Enabled by default when auto-refresh is on
+- Automatically scrolls to bottom when new logs are loaded
+- Intelligently disables when you manually scroll up to read older logs
+- Re-enables when you scroll back to the bottom or click "Scroll to Bottom"
+
+**Display:**
+- Line numbers for easy reference
+- Scrollable viewer with fixed-width monospace font
+- Hover highlighting on log lines
+- Smooth scrolling animations
+
+#### Log Rotation
+
+Logs are **not automatically rotated**. For long-running nodes, consider manually clearing the log file periodically:
+
+```bash
+# Linux/macOS
+> ~/.local/share/archivist/node.log
+
+# Windows (PowerShell)
+Clear-Content $env:APPDATA\archivist\node.log
+```
+
+Or delete the file entirely - it will be recreated on next node start.
+
+#### Debugging Common Issues
+
+Use logs to diagnose:
+- **Port conflicts**: Look for "Address already in use" errors
+- **Network issues**: Check for connection errors or timeout messages
+- **Discovery problems**: Search for "discovery datastore" warnings
+- **API errors**: Find failed requests and response codes
+- **Storage issues**: Look for quota warnings or disk errors
+
+Example log search workflow:
+1. Open Logs page
+2. Enable Auto-refresh
+3. Reproduce the issue
+4. Use browser's Find (Ctrl+F/Cmd+F) to search for error keywords
+5. Copy relevant logs for troubleshooting or bug reports
+
 ## Troubleshooting
 
 ### Port 8080 in use
@@ -853,9 +1085,11 @@ bash scripts/download-sidecar.sh
 **Problem:** Node has no network addresses
 
 **Solutions:**
-1. Check firewall allows port 8090 (P2P port)
+1. Check firewall allows both ports:
+   - Port 8090 (UDP) - Discovery
+   - Port 8070 (TCP) - Listen
 2. Ensure you're connected to a network
-3. Check Settings → Advanced → P2P Port configuration
+3. Check Settings → Advanced → Port configuration
 
 ### Pre-commit Hook Too Slow
 
@@ -943,7 +1177,26 @@ Sidecar binaries include SHA256 checksum verification in download script.
 
 ## Version History
 
-### v0.1.1 (Current)
+### v0.1.2 (Current)
+- **Feature:** Added built-in Logs viewer for real-time node log monitoring
+  - New Logs page with auto-refresh and auto-scroll capabilities
+  - Line count control (100, 500, 1000, 5000)
+  - Copy all logs and scroll to bottom controls
+  - Smart auto-scroll that detects manual scrolling
+- **Fixed:** Port architecture - separated discovery and listen ports
+  - Discovery port (UDP 8090) for DHT/mDNS peer discovery
+  - Listen port (TCP 8070) for P2P connections
+  - Previously used single `p2p_port` for both functions
+- **Fixed:** Configuration synchronization between AppConfig and NodeConfig
+  - Settings now properly persist and apply on app restart
+  - Added conversion from NodeSettings to NodeConfig
+- **Fixed:** CSS contrast issues in dropdown menus
+  - Improved text visibility in both light and dark modes
+  - Applied to Settings and Logs page dropdowns
+- **Added:** `get_node_logs` and `get_node_log_path` Tauri commands
+- **Added:** `--log-file` flag to sidecar startup
+
+### v0.1.1
 - **Fixed:** Upload API changed from multipart/form-data to raw binary
 - File sync now works correctly
 - Updated node API client in `src-tauri/src/node_api.rs`
@@ -965,10 +1218,16 @@ Sidecar binaries include SHA256 checksum verification in download script.
 | `src-tauri/src/node_api.rs` | HTTP client for sidecar API |
 | `src-tauri/src/services/sync.rs` | File watching + upload queue |
 | `src-tauri/src/services/node.rs` | Sidecar process management |
-| `src-tauri/src/commands/node.rs` | Node control commands including diagnostics |
+| `src-tauri/src/services/config.rs` | Settings persistence and configuration |
+| `src-tauri/src/commands/node.rs` | Node control commands including diagnostics and logs |
+| `src-tauri/src/state.rs` | AppState initialization and config sync |
 | `src/hooks/useNode.ts` | Node state management hook |
 | `src/hooks/useSync.ts` | Sync state management hook |
 | `src/pages/Dashboard.tsx` | Main UI with diagnostics panel |
+| `src/pages/Logs.tsx` | Real-time node logs viewer |
+| `src/pages/Settings.tsx` | App configuration with port settings |
+| `src/styles/Logs.css` | Logs page styling |
+| `src/styles/App.css` | Global styles and dropdown contrast fixes |
 | `scripts/download-sidecar.sh` | Sidecar binary downloader |
 | `src-tauri/tauri.conf.json` | Tauri app configuration |
 | `.github/workflows/ci.yml` | CI pipeline configuration |
@@ -1003,4 +1262,4 @@ All errors serialize to JSON for frontend consumption.
 
 ---
 
-*Last Updated: 2026-01-18*
+*Last Updated: 2026-01-19*

@@ -7,6 +7,7 @@ A cross-platform desktop application for decentralized file storage, built with 
 - **File Management**: Upload, download, and manage files on the decentralized network
 - **Folder Sync**: Watch folders and automatically sync changes to the network
 - **Peer Network**: Connect with peers, share SPR records, and monitor network stats
+- **Node Logs**: Built-in real-time log viewer with auto-refresh and auto-scroll
 - **System Tray**: Runs in the background with quick access from the system tray
 - **Auto-Update**: Automatic updates from GitHub releases
 
@@ -80,13 +81,17 @@ Settings are stored in:
 
 ## Network Setup
 
-To connect with peers on your local network, you need to open the P2P port (default: 8090) in your firewall.
+The application uses **two separate ports** for P2P networking:
+- **Discovery Port** (UDP, default: 8090): For finding peers via DHT/mDNS
+- **Listen Port** (TCP, default: 8070): For P2P connections and file transfers
+
+You need to open both ports in your firewall for full P2P functionality.
 
 ### Linux (UFW)
 
 ```bash
-sudo ufw allow 8090/tcp
-sudo ufw allow 8090/udp
+sudo ufw allow 8090/udp  # Discovery
+sudo ufw allow 8070/tcp  # P2P connections
 ```
 
 ### macOS
@@ -97,11 +102,11 @@ The firewall will prompt you to allow connections when the app first runs. Click
 
 ```powershell
 # Run as Administrator
-netsh advfirewall firewall add rule name="Archivist P2P" dir=in action=allow protocol=tcp localport=8090
-netsh advfirewall firewall add rule name="Archivist P2P UDP" dir=in action=allow protocol=udp localport=8090
+netsh advfirewall firewall add rule name="Archivist Discovery" dir=in action=allow protocol=udp localport=8090
+netsh advfirewall firewall add rule name="Archivist P2P" dir=in action=allow protocol=tcp localport=8070
 ```
 
-If you change the P2P port in Settings, update your firewall rules accordingly.
+If you change the ports in Settings → Advanced, update your firewall rules accordingly.
 
 ## License
 

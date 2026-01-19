@@ -6,7 +6,8 @@ import { useFeatures } from '../hooks/useFeatures';
 interface NodeSettings {
   data_directory: string;
   api_port: number;
-  p2p_port: number;
+  discovery_port: number; // UDP port for DHT/mDNS discovery
+  listen_port: number;    // TCP port for P2P connections
   max_storage_gb: number;
   auto_start: boolean;
 }
@@ -35,7 +36,8 @@ const defaultConfig: AppConfig = {
   node: {
     data_directory: '',
     api_port: 8080,
-    p2p_port: 8090,
+    discovery_port: 8090,
+    listen_port: 8070,
     max_storage_gb: 10,
     auto_start: true,
   },
@@ -247,20 +249,36 @@ function Settings() {
             />
           </div>
           <div className="setting-item">
-            <label>P2P Port (TCP/UDP)</label>
+            <label>Discovery Port (UDP)</label>
             <input
               type="number"
-              value={config.node.p2p_port}
+              value={config.node.discovery_port}
               onChange={(e) =>
                 setConfig((prev) => ({
                   ...prev,
-                  node: { ...prev.node, p2p_port: parseInt(e.target.value) || 8090 },
+                  node: { ...prev.node, discovery_port: parseInt(e.target.value) || 8090 },
                 }))
               }
               min={1024}
               max={65535}
             />
-            <span className="hint">Open this port in your firewall for peer connections</span>
+            <span className="hint">UDP port for DHT/mDNS peer discovery</span>
+          </div>
+          <div className="setting-item">
+            <label>Listen Port (TCP)</label>
+            <input
+              type="number"
+              value={config.node.listen_port}
+              onChange={(e) =>
+                setConfig((prev) => ({
+                  ...prev,
+                  node: { ...prev.node, listen_port: parseInt(e.target.value) || 8070 },
+                }))
+              }
+              min={1024}
+              max={65535}
+            />
+            <span className="hint">TCP port for P2P connections. Open both ports in your firewall.</span>
           </div>
         </div>
         <div className="setting-item">

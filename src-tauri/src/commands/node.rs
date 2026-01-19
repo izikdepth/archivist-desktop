@@ -2,6 +2,7 @@ use crate::error::Result;
 use crate::services::node::{NodeConfig, NodeStatus};
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
+use std::io::BufRead;
 use tauri::{AppHandle, State};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,4 +112,50 @@ pub async fn run_node_diagnostics(state: State<'_, AppState>) -> Result<Diagnost
             error: Some(format!("Failed to connect to node API: {}", e)),
         }),
     }
+}
+
+#[tauri::command]
+pub async fn get_node_logs(
+    state: State<'_, AppState>,
+    lines: Option<usize>,
+) -> Result<Vec<String>> {
+    let node = state.node.read().await;
+    let config = node.get_config();
+
+    // Construct log file path (same as in start_internal)
+    let log_file = std::path::Path::new(&config.data_dir)
+        .parent()
+        .unwrap_or(std::path::Path::new(&config.data_dir))
+        .join("node.log");
+
+    if !log_file.exists() {
+        return Ok(vec![
+            "Log file not found. Start the node to generate logs.".to_string()
+        ]);
+    }
+
+    // Read the log file
+    let file = std::fs::File::open(&log_file)?;
+
+    let reader = std::io::BufReader::new(file);
+    let all_lines: Vec<String> = reader.lines().map_while(|line| line.ok()).collect();
+
+    // Return last N lines (default: 500)
+    let num_lines = lines.unwrap_or(500);
+    let start_index = all_lines.len().saturating_sub(num_lines);
+
+    Ok(all_lines[start_index..].to_vec())
+}
+
+#[tauri::command]
+pub async fn get_node_log_path(state: State<'_, AppState>) -> Result<String> {
+    let node = state.node.read().await;
+    let config = node.get_config();
+
+    let log_file = std::path::Path::new(&config.data_dir)
+        .parent()
+        .unwrap_or(std::path::Path::new(&config.data_dir))
+        .join("node.log");
+
+    Ok(log_file.to_string_lossy().to_string())
 }

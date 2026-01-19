@@ -403,10 +403,26 @@ impl NodeApiClient {
             urlencoding::encode(multiaddr)
         );
 
-        let response =
-            self.client.get(&url).send().await.map_err(|e| {
-                ArchivistError::ApiError(format!("Failed to connect to peer: {}", e))
+        log::info!("Sending GET request to: {}", url);
+
+        let response = self
+            .client
+            .get(&url)
+            .timeout(Duration::from_secs(30)) // 30 second timeout for peer connection
+            .send()
+            .await
+            .map_err(|e| {
+                log::error!("HTTP request failed: {}", e);
+                if e.is_timeout() {
+                    ArchivistError::ApiError(
+                        "Connection attempt timed out after 30 seconds. The peer may be unreachable or the node may be busy.".to_string()
+                    )
+                } else {
+                    ArchivistError::ApiError(format!("Failed to connect to peer: {}", e))
+                }
             })?;
+
+        log::info!("Received response with status: {}", response.status());
 
         if !response.status().is_success() {
             let status = response.status();

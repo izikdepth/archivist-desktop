@@ -175,6 +175,36 @@ select:focus {
   outline: none;
 }
 
+/* Force high contrast for ALL select dropdowns */
+select {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  cursor: pointer;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+select option {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  padding: 0.5rem !important;
+}
+
+/* Force dark mode high contrast */
+@media (prefers-color-scheme: dark) {
+  select {
+    background-color: #2d2d2d !important;
+    color: #ffffff !important;
+    border-color: #555 !important;
+  }
+
+  select option {
+    background-color: #2d2d2d !important;
+    color: #ffffff !important;
+  }
+}
+
 input[type="checkbox"] {
   accent-color: var(--color-primary);
 }

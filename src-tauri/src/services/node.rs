@@ -66,7 +66,8 @@ impl Default for NodeStatus {
 pub struct NodeConfig {
     pub data_dir: String,
     pub api_port: u16,
-    pub p2p_port: u16,
+    pub discovery_port: u16, // UDP port for DHT/mDNS discovery
+    pub listen_port: u16,    // TCP port for P2P connections
     pub max_storage_bytes: u64,
     pub auto_start: bool,
     pub auto_restart: bool,
@@ -84,10 +85,28 @@ impl Default for NodeConfig {
 
         Self {
             data_dir,
-            api_port: 8080, // Default archivist-node API port
-            p2p_port: 8090, // Default archivist-node discovery port
+            api_port: 8080,       // Default archivist-node API port
+            discovery_port: 8090, // Default UDP port for DHT/mDNS discovery
+            listen_port: 8070,    // Default TCP port for P2P connections
             max_storage_bytes: 10 * 1024 * 1024 * 1024, // 10 GB default
             auto_start: false,
+            auto_restart: true,
+            max_restart_attempts: 3,
+            health_check_interval_secs: 30,
+        }
+    }
+}
+
+impl NodeConfig {
+    /// Create NodeConfig from persisted NodeSettings (AppConfig.node)
+    pub fn from_node_settings(settings: &crate::services::config::NodeSettings) -> Self {
+        Self {
+            data_dir: settings.data_directory.clone(),
+            api_port: settings.api_port,
+            discovery_port: settings.discovery_port,
+            listen_port: settings.listen_port,
+            max_storage_bytes: settings.max_storage_gb as u64 * 1024 * 1024 * 1024,
+            auto_start: settings.auto_start,
             auto_restart: true,
             max_restart_attempts: 3,
             health_check_interval_secs: 30,
@@ -138,9 +157,14 @@ pub struct NodeService {
 
 impl NodeService {
     pub fn new() -> Self {
+        Self::with_config(NodeConfig::default())
+    }
+
+    /// Create a new NodeService with the specified configuration
+    pub fn with_config(config: NodeConfig) -> Self {
         Self {
             status: NodeStatus::default(),
-            config: NodeConfig::default(),
+            config,
             process_state: None,
             shutdown_tx: None,
             public_ip_cache: None,
@@ -176,9 +200,21 @@ impl NodeService {
 
         // Build sidecar command with arguments
         // Note: archivist-node uses --key=value format (not --key value)
-        // Use the same port for both TCP (--listen-addrs) and UDP (--disc-port) for simplicity
+        // Use separate ports for discovery (UDP) and listening (TCP)
+        // - discovery_port: UDP port for DHT/mDNS peer discovery (default: 8090)
+        // - listen_port: TCP port for actual P2P connections (default: 8070)
         // Enable UPnP for automatic port forwarding on supported routers
-        let listen_addr = format!("/ip4/0.0.0.0/tcp/{}", self.config.p2p_port);
+        let listen_addr = format!("/ip4/0.0.0.0/tcp/{}", self.config.listen_port);
+
+        // Set up log file path
+        let log_file = std::path::Path::new(&self.config.data_dir)
+            .parent()
+            .unwrap_or(std::path::Path::new(&self.config.data_dir))
+            .join("node.log");
+        let log_file_str = log_file.to_string_lossy().to_string();
+
+        log::info!("Archivist node logs will be written to: {}", log_file_str);
+
         let sidecar_command = app_handle
             .shell()
             .sidecar("archivist")
@@ -186,9 +222,10 @@ impl NodeService {
             .args([
                 &format!("--data-dir={}", self.config.data_dir),
                 &format!("--api-port={}", self.config.api_port),
-                &format!("--disc-port={}", self.config.p2p_port),
+                &format!("--disc-port={}", self.config.discovery_port),
                 &format!("--listen-addrs={}", listen_addr),
                 &format!("--storage-quota={}", self.config.max_storage_bytes),
+                &format!("--log-file={}", log_file_str),
                 "--nat=upnp",
             ]);
 
@@ -362,12 +399,14 @@ impl NodeService {
     /// Clean up any orphaned archivist processes using our configured ports
     async fn cleanup_orphaned_processes(&self) {
         let api_port = self.config.api_port;
-        let p2p_port = self.config.p2p_port;
+        let discovery_port = self.config.discovery_port;
+        let listen_port = self.config.listen_port;
 
         log::info!(
-            "Checking for orphaned processes on ports {} and {}",
+            "Checking for orphaned processes on ports {} (API), {} (discovery), {} (listen)",
             api_port,
-            p2p_port
+            discovery_port,
+            listen_port
         );
 
         #[cfg(unix)]
@@ -386,12 +425,25 @@ impl NodeService {
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }
 
-            // Check and kill orphaned archivist processes on the P2P port
-            if let Some(pid) = Self::find_archivist_process_on_port(p2p_port) {
+            // Check and kill orphaned archivist processes on the discovery port
+            if let Some(pid) = Self::find_archivist_process_on_port(discovery_port) {
                 log::warn!(
                     "Found orphaned archivist process (PID {}) on port {}, killing it",
                     pid,
-                    p2p_port
+                    discovery_port
+                );
+                unsafe {
+                    libc::kill(pid as i32, libc::SIGTERM);
+                }
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+
+            // Check and kill orphaned archivist processes on the listen port
+            if let Some(pid) = Self::find_archivist_process_on_port(listen_port) {
+                log::warn!(
+                    "Found orphaned archivist process (PID {}) on port {}, killing it",
+                    pid,
+                    listen_port
                 );
                 unsafe {
                     libc::kill(pid as i32, libc::SIGTERM);

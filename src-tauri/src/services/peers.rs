@@ -133,8 +133,11 @@ impl PeerService {
     /// Format: /ip4/x.x.x.x/tcp/port/p2p/peerId
     /// Or: spr:CiUI...
     pub async fn connect_peer(&mut self, address: &str) -> Result<PeerInfo> {
+        log::info!("connect_peer called with address: {}", address);
+
         // Parse input to extract peer ID
         let peer_id = self.extract_peer_id(address)?;
+        log::info!("Extracted peer ID: {}", peer_id);
 
         // Determine the address to use for connection
         let connect_address = if address.starts_with("spr:") {
@@ -153,6 +156,12 @@ impl PeerService {
             // Just a peer ID, try to connect without address (uses peer discovery)
             String::new()
         };
+
+        log::info!(
+            "Calling node API to connect to peer {} via address: {}",
+            peer_id,
+            connect_address
+        );
 
         // Connect via node API
         self.api_client
