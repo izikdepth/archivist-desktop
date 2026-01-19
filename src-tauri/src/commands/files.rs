@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::services::files::{FileInfo, FileList, UploadResult};
 use crate::state::AppState;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 /// List all files from the node
 #[tauri::command]
@@ -20,12 +20,18 @@ pub async fn upload_file(state: State<'_, AppState>, path: String) -> Result<Upl
 /// Download a file by CID to a destination path
 #[tauri::command]
 pub async fn download_file(
+    app_handle: AppHandle,
     state: State<'_, AppState>,
     cid: String,
     destination: String,
 ) -> Result<()> {
     let files = state.files.read().await;
-    files.download_file(&cid, &destination).await
+    files.download_file(&cid, &destination).await?;
+
+    // Emit event for sound notification
+    let _ = app_handle.emit("file-downloaded", &cid);
+
+    Ok(())
 }
 
 /// Delete a file from local cache

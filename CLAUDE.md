@@ -910,6 +910,30 @@ rustflags = [
 
 After installing tools via winget, open a new terminal to pick up PATH changes.
 
+#### File Locking Error (Error 32)
+
+**Problem:** "IO error: The process cannot access the file because it is being used by another process. (os error 32)" when viewing logs.
+
+**Cause:** Windows locks files more strictly than Linux/macOS. When the archivist-node sidecar writes to the log file, the default file open operation fails without explicit sharing permissions.
+
+**Solution:** The log reading code in `src-tauri/src/commands/node.rs` uses Windows-specific `OpenOptions` with `FILE_SHARE_READ | FILE_SHARE_WRITE` flags:
+
+```rust
+#[cfg(target_os = "windows")]
+let file = {
+    use std::fs::OpenOptions;
+    use std::os::windows::fs::OpenOptionsExt;
+    OpenOptions::new()
+        .read(true)
+        .share_mode(0x00000001 | 0x00000002) // FILE_SHARE_READ | FILE_SHARE_WRITE
+        .open(&log_file)?
+};
+```
+
+This allows reading the log file while the node is actively writing to it.
+
+**Fixed in:** v0.1.2+
+
 ### Running Tests on Windows
 
 ```powershell
@@ -1105,6 +1129,23 @@ Edit `.husky/pre-commit` to skip some checks during development:
 - Ensure all changes are committed and pushed
 - Check CI logs for environment-specific issues
 - File paths might differ (use relative paths)
+
+### Windows: File Locking Error When Viewing Logs
+
+**Error:** `IO error: The process cannot access the file because it is being used by another process. (os error 32)`
+
+**Symptom:** Error appears when trying to view logs on the Logs page, even though the node is running properly.
+
+**Cause:** Windows file locking - the archivist-node sidecar has the log file open for writing, preventing the app from reading it.
+
+**Solution:** Fixed in v0.1.2+ by using Windows-specific file sharing flags. Update to the latest version.
+
+**Workaround (if on older version):**
+1. Stop the node temporarily
+2. View/copy the log file manually from `%APPDATA%\archivist\node.log`
+3. Restart the node
+
+See [Windows Development](#windows-development) section for technical details.
 
 ## Security
 

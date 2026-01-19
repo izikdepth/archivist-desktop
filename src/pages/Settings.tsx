@@ -19,6 +19,14 @@ interface SyncSettings {
   exclude_patterns: string[];
 }
 
+interface NotificationSettings {
+  sound_enabled: boolean;
+  sound_on_startup: boolean;
+  sound_on_peer_connect: boolean;
+  sound_on_download: boolean;
+  sound_volume: number; // 0.0 to 1.0
+}
+
 interface AppConfig {
   theme: 'light' | 'dark' | 'system';
   language: string;
@@ -26,6 +34,7 @@ interface AppConfig {
   start_on_boot: boolean;
   node: NodeSettings;
   sync: SyncSettings;
+  notifications: NotificationSettings;
 }
 
 const defaultConfig: AppConfig = {
@@ -46,6 +55,13 @@ const defaultConfig: AppConfig = {
     sync_interval_seconds: 300,
     bandwidth_limit_mbps: null,
     exclude_patterns: ['*.tmp', '*.temp', '.DS_Store', 'Thumbs.db'],
+  },
+  notifications: {
+    sound_enabled: true,
+    sound_on_startup: true,
+    sound_on_peer_connect: true,
+    sound_on_download: true,
+    sound_volume: 0.5,
   },
 };
 
@@ -399,6 +415,95 @@ function Settings() {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Notification Settings */}
+      <div className="settings-section">
+        <h3>Notifications</h3>
+        <div className="setting-item">
+          <label>
+            <input
+              type="checkbox"
+              checked={config.notifications.sound_enabled}
+              onChange={(e) =>
+                setConfig((prev) => ({
+                  ...prev,
+                  notifications: { ...prev.notifications, sound_enabled: e.target.checked },
+                }))
+              }
+            />
+            Enable sound notifications
+          </label>
+        </div>
+        <div className="setting-item">
+          <label>
+            <input
+              type="checkbox"
+              checked={config.notifications.sound_on_startup}
+              disabled={!config.notifications.sound_enabled}
+              onChange={(e) =>
+                setConfig((prev) => ({
+                  ...prev,
+                  notifications: { ...prev.notifications, sound_on_startup: e.target.checked },
+                }))
+              }
+            />
+            Play sound when node starts
+          </label>
+        </div>
+        <div className="setting-item">
+          <label>
+            <input
+              type="checkbox"
+              checked={config.notifications.sound_on_peer_connect}
+              disabled={!config.notifications.sound_enabled}
+              onChange={(e) =>
+                setConfig((prev) => ({
+                  ...prev,
+                  notifications: { ...prev.notifications, sound_on_peer_connect: e.target.checked },
+                }))
+              }
+            />
+            Play sound when connecting to a peer
+          </label>
+        </div>
+        <div className="setting-item">
+          <label>
+            <input
+              type="checkbox"
+              checked={config.notifications.sound_on_download}
+              disabled={!config.notifications.sound_enabled}
+              onChange={(e) =>
+                setConfig((prev) => ({
+                  ...prev,
+                  notifications: { ...prev.notifications, sound_on_download: e.target.checked },
+                }))
+              }
+            />
+            Play sound when downloading a file
+          </label>
+        </div>
+        <div className="setting-item">
+          <label>Volume</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={config.notifications.sound_volume * 100}
+              disabled={!config.notifications.sound_enabled}
+              onChange={(e) =>
+                setConfig((prev) => ({
+                  ...prev,
+                  notifications: { ...prev.notifications, sound_volume: parseInt(e.target.value) / 100 },
+                }))
+              }
+              style={{ flex: 1 }}
+            />
+            <span style={{ minWidth: '3rem' }}>{Math.round(config.notifications.sound_volume * 100)}%</span>
+          </div>
+          <span className="hint">Adjust notification sound volume</span>
         </div>
       </div>
 

@@ -135,6 +135,18 @@ pub async fn get_node_logs(
     }
 
     // Read the log file
+    // On Windows, we need to explicitly allow sharing to read files being written by the node
+    #[cfg(target_os = "windows")]
+    let file = {
+        use std::fs::OpenOptions;
+        use std::os::windows::fs::OpenOptionsExt;
+        OpenOptions::new()
+            .read(true)
+            .share_mode(0x00000001 | 0x00000002) // FILE_SHARE_READ | FILE_SHARE_WRITE
+            .open(&log_file)?
+    };
+
+    #[cfg(not(target_os = "windows"))]
     let file = std::fs::File::open(&log_file)?;
 
     let reader = std::io::BufReader::new(file);

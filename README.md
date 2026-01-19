@@ -17,6 +17,65 @@ A cross-platform desktop application for decentralized file storage, built with 
 - **Backend**: Rust + Tauri v2
 - **Node**: archivist-node sidecar for P2P networking
 
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────┐
+│              Archivist Desktop (Tauri App)               │
+│                                                          │
+│  ┌────────────────────┐      ┌────────────────────────┐ │
+│  │  React Frontend    │      │   Rust Backend         │ │
+│  │  (Webview)         │◄────►│   (Native Process)     │ │
+│  │                    │ IPC  │                        │ │
+│  │ • Dashboard        │      │ • Node Management      │ │
+│  │ • Files            │      │ • File Operations      │ │
+│  │ • Sync             │      │ • Folder Watching      │ │
+│  │ • Peers            │      │ • Peer Management      │ │
+│  │ • Logs             │      │ • Configuration        │ │
+│  │ • Settings         │      │ • HTTP Client          │ │
+│  └────────────────────┘      └───────────┬────────────┘ │
+│                                          │              │
+└──────────────────────────────────────────┼──────────────┘
+                                           │
+                                  HTTP (localhost:8080)
+                                           │
+┌──────────────────────────────────────────▼──────────────┐
+│           archivist-node Sidecar (Separate Process)     │
+│                                                          │
+│  • REST API (port 8080)                                 │
+│  • File Storage & CID Management                        │
+│  • P2P Network (libp2p)                                 │
+│  • Discovery (DHT/mDNS, UDP port 8090)                  │
+│  • Listen (TCP port 8070)                               │
+│  • Peer Connections                                     │
+│  • Data Replication                                     │
+└──────────────────────────────────────────┬──────────────┘
+                                           │
+                                   P2P (encrypted)
+                                           │
+                              ┌────────────▼────────────┐
+                              │   External Peers        │
+                              │   (libp2p network)      │
+                              └─────────────────────────┘
+```
+
+### How It Works
+
+1. **User Interface**: React frontend provides the UI (Dashboard, Files, Sync, Peers, Logs, Settings)
+2. **Tauri Backend**: Rust backend handles:
+   - Starting/stopping the archivist-node sidecar process
+   - Managing file system operations (uploads, downloads, folder watching)
+   - Proxying requests to the node's REST API
+   - Persisting application configuration
+3. **Archivist Node**: Standalone sidecar process that:
+   - Exposes REST API on localhost:8080
+   - Manages content-addressed storage (CIDs)
+   - Handles P2P networking via libp2p
+   - Discovers peers via DHT/mDNS on UDP port 8090
+   - Accepts peer connections on TCP port 8070
+   - Replicates data across the network
+4. **P2P Network**: Encrypted libp2p connections between peers for file transfer and discovery
+
 ## Development
 
 ### Prerequisites

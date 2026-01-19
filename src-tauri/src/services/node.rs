@@ -2,7 +2,7 @@ use crate::error::{ArchivistError, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::{broadcast, mpsc, RwLock};
@@ -282,6 +282,8 @@ impl NodeService {
 
         if ready {
             self.status.state = NodeState::Running;
+            // Emit event for sound notification
+            let _ = app_handle.emit("node-started", ());
         } else {
             log::warn!(
                 "Node API not ready after {:?}, may still be starting",
@@ -289,6 +291,8 @@ impl NodeService {
             );
             // Still set to Running - the health check will handle it if it's truly failed
             self.status.state = NodeState::Running;
+            // Still emit the event since the process started
+            let _ = app_handle.emit("node-started", ());
         }
 
         // Create channel to detect recoverable errors

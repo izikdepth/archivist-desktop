@@ -15,6 +15,9 @@ pub struct AppConfig {
     // Sync settings
     pub sync: SyncSettings,
 
+    // Notification settings
+    pub notifications: NotificationSettings,
+
     // V2 Marketplace settings (optional)
     #[cfg(feature = "marketplace")]
     pub blockchain: Option<BlockchainSettings>,
@@ -47,6 +50,15 @@ pub struct SyncSettings {
     pub sync_interval_seconds: u32,
     pub bandwidth_limit_mbps: Option<u32>,
     pub exclude_patterns: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotificationSettings {
+    pub sound_enabled: bool,
+    pub sound_on_startup: bool,
+    pub sound_on_peer_connect: bool,
+    pub sound_on_download: bool,
+    pub sound_volume: f32, // 0.0 to 1.0
 }
 
 #[cfg(feature = "marketplace")]
@@ -96,6 +108,13 @@ impl Default for AppConfig {
                     ".DS_Store".to_string(),
                     "Thumbs.db".to_string(),
                 ],
+            },
+            notifications: NotificationSettings {
+                sound_enabled: true,
+                sound_on_startup: true,
+                sound_on_peer_connect: true,
+                sound_on_download: true,
+                sound_volume: 0.5,
             },
             #[cfg(feature = "marketplace")]
             blockchain: None,
