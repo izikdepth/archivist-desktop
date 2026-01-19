@@ -225,7 +225,6 @@ impl NodeService {
                 &format!("--disc-port={}", self.config.discovery_port),
                 &format!("--listen-addrs={}", listen_addr),
                 &format!("--storage-quota={}", self.config.max_storage_bytes),
-                &format!("--log-file={}", log_file_str),
                 "--nat=upnp",
             ]);
 
@@ -298,14 +297,36 @@ impl NodeService {
         // Create channel to detect recoverable errors
         let (error_tx, mut error_rx) = mpsc::channel::<String>(10);
         let data_dir_clone = self.config.data_dir.clone();
+        let log_file_path = log_file.clone();
 
         // Spawn task to handle stdout/stderr from the sidecar
         tokio::spawn(async move {
+            // Open log file for writing (create or append)
+            use std::fs::OpenOptions;
+            use std::io::Write;
+
+            let mut log_file_handle = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_file_path);
+
+            if let Err(e) = &log_file_handle {
+                log::error!("Failed to open log file for writing: {}", e);
+            }
+
             while let Some(event) = rx.recv().await {
                 match event {
                     CommandEvent::Stdout(line) => {
                         let line_str = String::from_utf8_lossy(&line);
-                        log::info!("[archivist-node] {}", line_str.trim());
+                        let trimmed = line_str.trim();
+                        log::info!("[archivist-node] {}", trimmed);
+
+                        // Write to log file
+                        if let Ok(ref mut file) = log_file_handle {
+                            let _ = writeln!(file, "{}", trimmed);
+                            let _ = file.flush();
+                        }
+
                         // Check for recoverable errors
                         if line_str.contains("Should create discovery datastore!") {
                             let _ = error_tx.send("discovery_datastore_error".to_string()).await;
@@ -317,7 +338,15 @@ impl NodeService {
                     }
                     CommandEvent::Stderr(line) => {
                         let line_str = String::from_utf8_lossy(&line);
-                        log::warn!("[archivist-node] {}", line_str.trim());
+                        let trimmed = line_str.trim();
+                        log::warn!("[archivist-node] {}", trimmed);
+
+                        // Write to log file
+                        if let Ok(ref mut file) = log_file_handle {
+                            let _ = writeln!(file, "{}", trimmed);
+                            let _ = file.flush();
+                        }
+
                         // Check for recoverable errors in stderr too
                         if line_str.contains("Should create discovery datastore!") {
                             let _ = error_tx.send("discovery_datastore_error".to_string()).await;

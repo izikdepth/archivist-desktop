@@ -225,18 +225,19 @@ function Files() {
         return;
       }
 
+      // Update the CID in state immediately (before onChange fires)
+      setDownloadCid(pastedText);
+
       // Schedule auto-download after short delay
       setAutoDownloadPending(true);
       autoDownloadTimerRef.current = window.setTimeout(async () => {
         setAutoDownloadPending(false);
-        // Check CID hasn't changed since paste
-        if (downloadCid.trim() === pastedText.trim()) {
-          await handleDownloadByCid();
-        }
+        // Trigger download - no need to check CID since we just set it
+        await handleDownloadByCid();
         autoDownloadTimerRef.current = null;
       }, 300); // 300ms delay
     },
-    [downloadCid, nodeConnected, handleDownloadByCid]
+    [nodeConnected, handleDownloadByCid]
   );
 
   const handleCidChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
