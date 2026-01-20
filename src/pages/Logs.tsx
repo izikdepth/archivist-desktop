@@ -2,14 +2,44 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import '../styles/Logs.css';
 
+// LocalStorage keys for persisting settings
+const STORAGE_KEYS = {
+  AUTO_REFRESH: 'logs_auto_refresh',
+  AUTO_SCROLL: 'logs_auto_scroll',
+  LINE_COUNT: 'logs_line_count',
+};
+
+// Load setting from localStorage with fallback
+function loadSetting<T>(key: string, defaultValue: T): T {
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored === null) return defaultValue;
+    return JSON.parse(stored) as T;
+  } catch {
+    return defaultValue;
+  }
+}
+
+// Save setting to localStorage
+function saveSetting<T>(key: string, value: T): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error('Failed to save setting to localStorage:', error);
+  }
+}
+
 function Logs() {
   const [logs, setLogs] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [logPath, setLogPath] = useState<string>('');
-  const [autoRefresh, setAutoRefresh] = useState(false);
-  const [autoScroll, setAutoScroll] = useState(true);
-  const [lineCount, setLineCount] = useState(500);
+
+  // Load settings from localStorage on mount
+  const [autoRefresh, setAutoRefresh] = useState(() => loadSetting(STORAGE_KEYS.AUTO_REFRESH, false));
+  const [autoScroll, setAutoScroll] = useState(() => loadSetting(STORAGE_KEYS.AUTO_SCROLL, true));
+  const [lineCount, setLineCount] = useState(() => loadSetting(STORAGE_KEYS.LINE_COUNT, 500));
+
   const logsEndRef = useRef<HTMLDivElement>(null);
   const logsViewerRef = useRef<HTMLDivElement>(null);
 
@@ -34,6 +64,19 @@ function Logs() {
       console.error('Failed to fetch log path:', e);
     }
   };
+
+  // Persist settings to localStorage when they change
+  useEffect(() => {
+    saveSetting(STORAGE_KEYS.AUTO_REFRESH, autoRefresh);
+  }, [autoRefresh]);
+
+  useEffect(() => {
+    saveSetting(STORAGE_KEYS.AUTO_SCROLL, autoScroll);
+  }, [autoScroll]);
+
+  useEffect(() => {
+    saveSetting(STORAGE_KEYS.LINE_COUNT, lineCount);
+  }, [lineCount]);
 
   useEffect(() => {
     fetchLogs();
