@@ -185,6 +185,17 @@ download_binary() {
     chmod +x "${SIDECARS_DIR}/${output_name}"
 
     echo "Binary installed to: ${SIDECARS_DIR}/${output_name}"
+
+    # For Windows, also copy the required DLLs (MinGW runtime)
+    if [[ "$platform" == *"windows"* ]]; then
+        echo "Copying Windows runtime DLLs..."
+        for dll in "${temp_dir}"/*.dll; do
+            if [[ -f "$dll" ]]; then
+                cp "$dll" "${SIDECARS_DIR}/"
+                echo "  Copied: $(basename "$dll")"
+            fi
+        done
+    fi
 }
 
 # Download for a specific target (for cross-compilation)

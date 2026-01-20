@@ -30,6 +30,13 @@ Download the appropriate binary from the [archivist-node releases](https://githu
 
 Extract and rename the binary to match the sidecar filename, then place it in this directory.
 
+## Windows Runtime DLLs
+
+The Windows binary requires MinGW runtime DLLs (`libgcc_s_seh-1.dll` and `libwinpthread-1.dll`).
+These are automatically extracted from the Windows release archive by the download script.
+Unlike the binary, these DLLs are tracked in git since they're small and required for the app to run.
+
 ## Note
 
-These binaries are gitignored due to their size. Each developer/CI pipeline must download them before building.
+The main binary is gitignored due to its size. Each developer/CI pipeline must download it before building.
+The DLL files are tracked in git to ensure the app works out of the box on Windows.

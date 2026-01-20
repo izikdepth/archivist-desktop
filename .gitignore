@@ -32,6 +32,10 @@ src-tauri/sidecars/archivist-*
 !src-tauri/sidecars/README.md
 !src-tauri/sidecars/.gitkeep
 
+# Windows sidecar DLLs (downloaded with sidecar, needed at runtime)
+# These are tracked because they must be bundled with the app
+!src-tauri/sidecars/*.dll
+
 # Local cargo config (machine-specific paths)
 src-tauri/.cargo/
 
