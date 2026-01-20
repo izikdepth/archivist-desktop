@@ -429,8 +429,45 @@ impl SyncService {
             }
             self.is_syncing = false;
 
-            // TODO: Check if any folders need manifest generation (threshold reached)
-            // This would be integrated with backup service in later phases
+            // Check if any folders need manifest generation (threshold reached)
+            let folders_needing_manifest: Vec<String> = self
+                .folders
+                .iter()
+                .filter_map(|(id, _)| {
+                    let changes = self.changes_since_manifest.get(id).copied().unwrap_or(0);
+                    if changes >= self.manifest_update_threshold {
+                        Some(id.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            // Generate manifests for folders that reached threshold
+            for folder_id in folders_needing_manifest {
+                log::info!(
+                    "Threshold reached for folder {}, generating manifest",
+                    folder_id
+                );
+                match self.upload_manifest(&folder_id).await {
+                    Ok(manifest_cid) => {
+                        log::info!(
+                            "Manifest generated and uploaded for folder {}: {}",
+                            folder_id,
+                            manifest_cid
+                        );
+                        // Note: Backup notification will be handled by backup service
+                        // based on manifest_cid and pending_retry flags
+                    }
+                    Err(e) => {
+                        log::error!(
+                            "Failed to generate manifest for folder {}: {}",
+                            folder_id,
+                            e
+                        );
+                    }
+                }
+            }
 
             return Ok(0);
         }
@@ -782,6 +819,29 @@ pub struct SyncManager {
 impl SyncManager {
     pub fn new(sync_service: Arc<RwLock<SyncService>>) -> Self {
         Self { sync_service }
+    }
+
+    /// Get list of folders that need manifest retry
+    /// Used by backup notification background task
+    pub async fn get_pending_manifests(&self) -> Vec<(String, String)> {
+        let sync = self.sync_service.read().await;
+        let mut pending = Vec::new();
+
+        for (folder_id, folder) in sync.folders.iter() {
+            if folder.pending_retry {
+                if let Some(manifest_cid) = &folder.manifest_cid {
+                    pending.push((folder_id.clone(), manifest_cid.clone()));
+                }
+            }
+        }
+
+        pending
+    }
+
+    /// Mark manifest as successfully notified (clear pending_retry)
+    pub async fn mark_manifest_notified(&self, folder_id: &str) -> Result<()> {
+        let mut sync = self.sync_service.write().await;
+        sync.acknowledge_manifest(folder_id)
     }
 
     /// Start background sync processing
