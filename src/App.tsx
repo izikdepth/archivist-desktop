@@ -1,6 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
 import { useFeatures } from './hooks/useFeatures';
 import { useSoundNotifications } from './hooks/useSoundNotifications';
+import { useIntroModal } from './hooks/useIntroModal';
+import { IntroModal } from './components/IntroModal';
 import Dashboard from './pages/Dashboard';
 import Files from './pages/Files';
 import Sync from './pages/Sync';
@@ -14,9 +16,11 @@ import './styles/App.css';
 function App() {
   const { marketplaceEnabled } = useFeatures();
   useSoundNotifications(); // Enable sound notifications globally
+  const { showIntro, hideIntro } = useIntroModal();
 
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      {showIntro && <IntroModal onClose={hideIntro} />}
       <div className="app">
         <aside className="sidebar">
           <div className="logo">
