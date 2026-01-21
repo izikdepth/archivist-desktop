@@ -1578,13 +1578,15 @@ Discover Manifest
     ↓
 Check if already processed? → Yes → Skip
     ↓ No
-Download manifest JSON from local node
+Connect to source peer via P2P (using multiaddr)
+    ↓
+Download manifest JSON from network
     ↓
 Parse and validate
     ↓
 Validate sequence number (detect gaps)
     ↓
-Download files in batches
+Download files in batches (via P2P)
     ↓
     ┌───────────────────┬────────────────────┐
     ↓                   ↓                    ↓
@@ -2862,6 +2864,16 @@ Sidecar binaries include SHA256 checksum verification in download script.
   - **Solution:** Uses `FILE_SHARE_READ | FILE_SHARE_WRITE` flags in `OpenOptions` on Windows
   - **Fixed in:** [src-tauri/src/commands/node.rs](src-tauri/src/commands/node.rs) `get_node_logs` command
   - **Platform-specific:** Only affects Windows, Linux/macOS use standard file opening
+
+- **Backup Daemon Network Download Fix**
+  - **Problem:** Backup daemon failed to download manifests from source peers with "error sending request for url" errors
+  - **Cause:** The daemon attempted to fetch files via `/data/{cid}/network` without first establishing a P2P connection to the source peer
+  - **Solution:**
+    - Added peer connection step before network downloads in `process_manifest()`
+    - Store `multiaddr` in `FailedManifest` struct for retry attempts
+    - Pass peer_id and multiaddr through the manifest processing chain
+  - **Fixed in:** [src-tauri/src/services/backup_daemon.rs](src-tauri/src/services/backup_daemon.rs)
+  - **Affected methods:** `process_manifest()`, `finalize_manifest_processing()`, `retry_failed_manifests()`, `retry_manifest()`
 
 #### Documentation
 
