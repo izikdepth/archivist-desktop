@@ -73,6 +73,8 @@ pub struct FailedManifest {
     pub failed_at: DateTime<Utc>,
     pub error_message: String,
     pub retry_count: u32,
+    #[serde(default)]
+    pub multiaddr: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -438,8 +440,31 @@ impl BackupDaemon {
     }
 
     /// Process a single manifest (download from network if needed)
-    async fn process_manifest(&self, manifest_cid: &str) -> Result<()> {
+    async fn process_manifest(
+        &self,
+        manifest_cid: &str,
+        peer_id: Option<&str>,
+        multiaddr: Option<&str>,
+    ) -> Result<()> {
         log::info!("Processing manifest: {}", manifest_cid);
+
+        // 0. Connect to source peer if multiaddr is provided (required for network download)
+        if let (Some(pid), Some(addr)) = (peer_id, multiaddr) {
+            log::info!(
+                "Connecting to source peer {} at {} before network download",
+                pid,
+                addr
+            );
+            if let Err(e) = self.api_client.connect_peer(pid, addr).await {
+                log::warn!(
+                    "Failed to connect to peer {}: {} (will try download anyway)",
+                    pid,
+                    e
+                );
+            } else {
+                log::info!("Successfully connected to source peer {}", pid);
+            }
+        }
 
         // 1. Try to download manifest from local storage first, then from network
         let manifest_bytes = match self.api_client.download_file(manifest_cid).await {
@@ -510,6 +535,7 @@ impl BackupDaemon {
             &manifest,
             download_result,
             deletion_result,
+            multiaddr,
         )
         .await?;
 
@@ -717,6 +743,7 @@ impl BackupDaemon {
         manifest: &ManifestFile,
         download_result: Result<DownloadResult>,
         deletion_result: Result<DeletionResult>,
+        multiaddr: Option<&str>,
     ) -> Result<()> {
         let mut state = self.state.write().await;
 
@@ -762,6 +789,7 @@ impl BackupDaemon {
                     failed_at: Utc::now(),
                     error_message: e.to_string(),
                     retry_count: 0,
+                    multiaddr: multiaddr.map(|s| s.to_string()),
                 });
 
                 log::error!("Manifest processing failed: {} - {}", manifest_cid, e);
@@ -834,12 +862,29 @@ impl BackupDaemon {
 
         // 3. Process each manifest
         for manifest in &unprocessed {
-            match self.process_manifest(&manifest.cid).await {
+            match self
+                .process_manifest(
+                    &manifest.cid,
+                    Some(&manifest.source_peer_id),
+                    manifest.multiaddr.as_deref(),
+                )
+                .await
+            {
                 Ok(_) => {
                     log::info!("Successfully processed manifest: {}", manifest.cid);
                 }
                 Err(e) => {
                     log::error!("Failed to process manifest {}: {}", manifest.cid, e);
+                    // Store as failed with multiaddr for retry
+                    let mut state = self.state.write().await;
+                    state.failed_manifests.push(FailedManifest {
+                        manifest_cid: manifest.cid.clone(),
+                        source_peer_id: manifest.source_peer_id.clone(),
+                        failed_at: Utc::now(),
+                        error_message: e.to_string(),
+                        retry_count: 0,
+                        multiaddr: manifest.multiaddr.clone(),
+                    });
                 }
             }
         }
@@ -892,7 +937,14 @@ impl BackupDaemon {
                 self.max_retries
             );
 
-            match self.process_manifest(&failed.manifest_cid).await {
+            match self
+                .process_manifest(
+                    &failed.manifest_cid,
+                    Some(&failed.source_peer_id),
+                    failed.multiaddr.as_deref(),
+                )
+                .await
+            {
                 Ok(_) => {
                     // Success - already marked as processed in finalize_manifest_processing
                     log::info!("Retry succeeded for manifest: {}", failed.manifest_cid);
@@ -917,15 +969,30 @@ impl BackupDaemon {
     pub async fn retry_manifest(&self, manifest_cid: &str) -> Result<()> {
         log::info!("Manual retry requested for manifest: {}", manifest_cid);
 
-        // Remove from failed list
+        // Find and remove from failed list, capturing peer info
         let mut state = self.state.write().await;
+        let failed_info = state
+            .failed_manifests
+            .iter()
+            .find(|m| m.manifest_cid == manifest_cid)
+            .map(|m| (m.source_peer_id.clone(), m.multiaddr.clone()));
         state
             .failed_manifests
             .retain(|m| m.manifest_cid != manifest_cid);
         drop(state);
 
-        // Process manifest
-        self.process_manifest(manifest_cid).await?;
+        // Process manifest with peer info if available
+        let (peer_id, multiaddr) = failed_info.unwrap_or_default();
+        self.process_manifest(
+            manifest_cid,
+            if peer_id.is_empty() {
+                None
+            } else {
+                Some(peer_id.as_str())
+            },
+            multiaddr.as_deref(),
+        )
+        .await?;
 
         Ok(())
     }
