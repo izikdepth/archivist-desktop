@@ -99,21 +99,63 @@ pub async fn notify_backup_peer(state: State<'_, AppState>, folder_id: String) -
 
     drop(sync);
 
-    // Get backup peer address from config
+    // 1. Verify manifest is registered with ManifestRegistry
+    let registry = state.manifest_registry.read().await;
+    let is_registered = registry
+        .get_all_manifests()
+        .iter()
+        .any(|m| m.manifest_cid == manifest_cid);
+    drop(registry);
+
+    if !is_registered {
+        log::warn!(
+            "Manifest {} not registered, registering now before notifying backup peer",
+            manifest_cid
+        );
+        // Re-register if somehow not in registry
+        let sync = state.sync.read().await;
+        if let Some(folder) = sync.get_folder(&folder_id) {
+            let manifest_info = ManifestInfo {
+                folder_id: folder_id.clone(),
+                folder_path: folder.path.clone(),
+                manifest_cid: manifest_cid.clone(),
+                sequence_number: folder.manifest_sequence,
+                updated_at: Utc::now().to_rfc3339(),
+                file_count: folder.file_count,
+                total_size_bytes: folder.total_size_bytes,
+            };
+            drop(sync);
+            let mut registry = state.manifest_registry.write().await;
+            registry.register_manifest(manifest_info);
+        }
+    }
+
+    log::info!(
+        "Manifest {} verified in registry, proceeding with backup notification",
+        manifest_cid
+    );
+
+    // 2. Get backup peer address and trigger port from config
     let config = state.config.read().await;
     let app_config = config.get();
     let backup_addr = app_config
         .sync
         .backup_peer_address
+        .clone()
         .ok_or_else(|| ArchivistError::ConfigError("No backup peer configured".into()))?;
-
+    let trigger_port = app_config.sync.backup_trigger_port;
     drop(config);
 
-    // Notify backup peer
+    // 3. Notify backup peer via HTTP trigger
     let backup = state.backup.read().await;
     backup
-        .notify_backup_peer(&manifest_cid, &backup_addr)
+        .notify_backup_peer(&manifest_cid, &backup_addr, trigger_port)
         .await?;
+
+    log::info!(
+        "Successfully notified backup peer to poll for manifest: {}",
+        manifest_cid
+    );
 
     Ok(())
 }

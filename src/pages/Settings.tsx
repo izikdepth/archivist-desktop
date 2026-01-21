@@ -614,10 +614,10 @@ function Settings() {
                     sync: { ...prev.sync, backup_peer_address: e.target.value || null },
                   }))
                 }
-                placeholder="spr:CiUI... or /ip4/.../tcp/.../p2p/..."
+                placeholder="/ip4/<public-ip>/tcp/8070/p2p/<peer-id>"
               />
               <span className="hint">
-                SPR or multiaddr of your backup peer (e.g., your home server)
+                Multiaddr of your backup peer (e.g., your home server)
               </span>
             </div>
 

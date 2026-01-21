@@ -123,11 +123,8 @@ pub async fn get_node_logs(
     let node = state.node.read().await;
     let config = node.get_config();
 
-    // Construct log file path (same as in start_internal)
-    let log_file = std::path::Path::new(&config.data_dir)
-        .parent()
-        .unwrap_or(std::path::Path::new(&config.data_dir))
-        .join("node.log");
+    // Construct log file path (inside data_dir)
+    let log_file = std::path::Path::new(&config.data_dir).join("node.log");
 
     if !log_file.exists() {
         return Ok(vec![
@@ -165,10 +162,7 @@ pub async fn get_node_log_path(state: State<'_, AppState>) -> Result<String> {
     let node = state.node.read().await;
     let config = node.get_config();
 
-    let log_file = std::path::Path::new(&config.data_dir)
-        .parent()
-        .unwrap_or(std::path::Path::new(&config.data_dir))
-        .join("node.log");
+    let log_file = std::path::Path::new(&config.data_dir).join("node.log");
 
     Ok(log_file.to_string_lossy().to_string())
 }

@@ -1044,7 +1044,7 @@ Backup Server (Remote)
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | Enable automatic backup | Checkbox | false | Master switch for backup feature |
-| Backup Peer Address | Text | null | SPR or multiaddr of backup server |
+| Backup Peer Address | Text | null | Multiaddr of backup server |
 | Backup Peer Nickname | Text | null | Optional friendly name for backup peer |
 | Generate manifest files | Checkbox | true | Create .archivist-manifest-{peer_id}.json files |
 | Automatically notify backup peer | Checkbox | false | Auto-create storage requests after manifest generation |
@@ -1066,10 +1066,9 @@ Backup Server (Remote)
    - Check "Enable automatic backup to designated peer"
 
 2. **Configure Backup Server Address**
-   - Enter backup server's SPR or multiaddr in "Backup Peer Address"
-   - Format options:
-     - SPR: `spr:CiUIAhIBI...`
-     - Multiaddr: `/ip4/192.168.1.100/tcp/8070/p2p/16Uiu2HAm...`
+   - Enter backup server's multiaddr in "Backup Peer Address"
+   - Format: `/ip4/<public-ip>/tcp/8070/p2p/<peer-id>`
+   - Example: `/ip4/192.168.1.100/tcp/8070/p2p/16Uiu2HAm...`
 
 3. **Optional: Set Nickname**
    - Enter friendly name like "Home Server" for identification
@@ -1121,7 +1120,7 @@ Backup Server (Remote)
      ```
 
 5. **Use Address in Primary Desktop**
-   - Copy SPR or multiaddr
+   - Copy multiaddr from Dashboard (includes peer ID)
    - Enter in primary desktop's backup peer address setting
 
 6. **Automatic Reception**
@@ -1352,7 +1351,7 @@ await invoke('notify_backup_peer', {
 ```typescript
 // Test if backup peer is reachable
 const connected = await invoke<boolean>('test_backup_peer_connection', {
-  peerAddress: 'spr:CiUI... or /ip4/.../tcp/.../p2p/...'
+  peerAddress: '/ip4/<public-ip>/tcp/8070/p2p/<peer-id>'
 });
 ```
 
@@ -1939,7 +1938,7 @@ Added navigation link and route:
 
 3. **Configure Source Peers**
    - On source desktops, configure backup peer address (Settings → Sync → Backup to Peer)
-   - Point to backup server's SPR or multiaddr
+   - Point to backup server's multiaddr (e.g., `/ip4/<ip>/tcp/8070/p2p/<peer-id>`)
    - Enable "Automatically notify backup peer"
 
 4. **Monitor Dashboard**
@@ -2313,10 +2312,7 @@ When the node starts, the `--log-file` flag is automatically added:
 
 ```rust
 // From src-tauri/src/services/node.rs
-let log_file = std::path::Path::new(&config.data_dir)
-    .parent()
-    .unwrap_or(std::path::Path::new(&config.data_dir))
-    .join("node.log");
+let log_file = std::path::Path::new(&config.data_dir).join("node.log");
 
 .args([
     &format!("--data-dir={}", config.data_dir),

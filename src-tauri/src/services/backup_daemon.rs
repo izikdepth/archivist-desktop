@@ -7,6 +7,7 @@
 //! - Downloads missing files from the network
 //! - Enforces deletions based on tombstones
 //! - Tracks processing state with sequence numbers
+//! - Accepts trigger notifications from source peers via HTTP
 
 use crate::error::{ArchivistError, Result};
 use crate::node_api::NodeApiClient;
@@ -18,8 +19,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, RwLock};
 use tokio::time::Duration;
+use warp::Filter;
 
 /// Persistent state for backup daemon (stored in daemon-state.json)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -174,6 +176,12 @@ pub struct BackupDaemon {
     auto_delete_tombstones: bool,
     /// Source peers to poll for manifests
     source_peers: Arc<RwLock<Vec<SourcePeerConfig>>>,
+    /// Port for HTTP trigger server
+    trigger_port: u16,
+    /// Channel to send trigger signals to the main loop
+    trigger_tx: mpsc::Sender<()>,
+    /// Channel to receive trigger signals (held by main loop)
+    trigger_rx: Arc<RwLock<mpsc::Receiver<()>>>,
 }
 
 impl BackupDaemon {
@@ -185,12 +193,16 @@ impl BackupDaemon {
         max_concurrent_downloads: u32,
         max_retries: u32,
         auto_delete_tombstones: bool,
+        trigger_port: u16,
     ) -> Self {
         let state_path = dirs::data_dir()
             .map(|p| p.join("archivist").join("backup-daemon-state.json"))
             .unwrap_or_else(|| PathBuf::from("backup-daemon-state.json"));
 
         let state = Self::load_state(&state_path).unwrap_or_default();
+
+        // Create trigger channel (buffer of 10 to avoid blocking)
+        let (trigger_tx, trigger_rx) = mpsc::channel(10);
 
         Self {
             api_client,
@@ -203,6 +215,9 @@ impl BackupDaemon {
             max_retries,
             auto_delete_tombstones,
             source_peers: Arc::new(RwLock::new(Vec::new())),
+            trigger_port,
+            trigger_tx,
+            trigger_rx: Arc::new(RwLock::new(trigger_rx)),
         }
     }
 
@@ -289,6 +304,62 @@ impl BackupDaemon {
     /// Check if daemon is enabled
     pub fn is_enabled(&self) -> bool {
         self.enabled.load(Ordering::Relaxed)
+    }
+
+    /// Get the trigger port
+    pub fn get_trigger_port(&self) -> u16 {
+        self.trigger_port
+    }
+
+    /// Trigger an immediate poll cycle
+    pub async fn trigger_poll(&self) -> Result<()> {
+        log::info!("Received trigger to poll immediately");
+        self.trigger_tx
+            .send(())
+            .await
+            .map_err(|e| ArchivistError::SyncError(format!("Failed to send trigger: {}", e)))?;
+        Ok(())
+    }
+
+    /// Start the HTTP trigger server (runs in background)
+    pub async fn start_trigger_server(self: Arc<Self>) {
+        let port = self.trigger_port;
+        let daemon = self.clone();
+
+        // POST /trigger - triggers immediate poll
+        let trigger_route = warp::path("trigger")
+            .and(warp::post())
+            .and(warp::any().map(move || daemon.clone()))
+            .and_then(|daemon: Arc<BackupDaemon>| async move {
+                match daemon.trigger_poll().await {
+                    Ok(_) => {
+                        log::info!("Trigger request received and processed");
+                        Ok::<_, warp::Rejection>(warp::reply::json(&serde_json::json!({
+                            "status": "ok",
+                            "message": "Poll triggered"
+                        })))
+                    }
+                    Err(e) => {
+                        log::error!("Trigger request failed: {}", e);
+                        Ok(warp::reply::json(&serde_json::json!({
+                            "status": "error",
+                            "message": format!("{}", e)
+                        })))
+                    }
+                }
+            });
+
+        // GET /health - health check
+        let health_route = warp::path("health")
+            .and(warp::get())
+            .map(|| warp::reply::json(&serde_json::json!({"status": "ok"})));
+
+        let routes = trigger_route.or(health_route);
+
+        log::info!("Starting backup daemon trigger server on port {}", port);
+
+        // Run server (this blocks, so it should be spawned)
+        warp::serve(routes).run(([0, 0, 0, 0], port)).await;
     }
 
     /// Discover new manifests by polling source peers
@@ -705,9 +776,10 @@ impl BackupDaemon {
     /// Start the backup daemon background loop
     pub async fn start(self: Arc<Self>) {
         log::info!(
-            "Starting backup daemon (poll interval: {}s, max concurrent downloads: {})",
+            "Starting backup daemon (poll interval: {}s, max concurrent downloads: {}, trigger port: {})",
             self.poll_interval_secs,
-            self.max_concurrent_downloads
+            self.max_concurrent_downloads,
+            self.trigger_port
         );
 
         loop {
@@ -729,8 +801,20 @@ impl BackupDaemon {
                 }
             }
 
-            // Wait for next cycle
-            tokio::time::sleep(Duration::from_secs(self.poll_interval_secs)).await;
+            // Wait for next cycle OR trigger signal
+            let poll_interval = Duration::from_secs(self.poll_interval_secs);
+            let mut trigger_rx = self.trigger_rx.write().await;
+
+            tokio::select! {
+                _ = tokio::time::sleep(poll_interval) => {
+                    // Normal poll interval elapsed
+                    log::debug!("Poll interval elapsed, running cycle");
+                }
+                Some(_) = trigger_rx.recv() => {
+                    // Trigger received - run immediately
+                    log::info!("Trigger received, running cycle immediately");
+                }
+            }
         }
     }
 

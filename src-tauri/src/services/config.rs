@@ -65,6 +65,9 @@ pub struct SyncSettings {
     pub backup_peer_nickname: Option<String>,
     pub backup_manifest_enabled: bool,
     pub backup_auto_notify: bool,
+    /// Port for the backup server's HTTP trigger endpoint (default: 8086)
+    #[serde(default = "default_trigger_port")]
+    pub backup_trigger_port: u16,
 
     // NEW: Continuous sync settings
     pub manifest_update_threshold: u32,
@@ -94,9 +97,16 @@ pub struct BackupServerSettings {
     pub max_concurrent_downloads: u32,
     pub max_retries: u32,
     pub auto_delete_tombstones: bool,
+    /// Port for receiving trigger notifications from source peers (default: 8086)
+    #[serde(default = "default_trigger_port")]
+    pub trigger_port: u16,
     /// Source peers to poll for manifests (list of host:port pairs)
     #[serde(default)]
     pub source_peers: Vec<SourcePeerConfig>,
+}
+
+fn default_trigger_port() -> u16 {
+    8086
 }
 
 /// Configuration for a source peer to poll for manifests
@@ -191,6 +201,7 @@ impl Default for AppConfig {
                 backup_peer_nickname: None,
                 backup_manifest_enabled: true,
                 backup_auto_notify: false,
+                backup_trigger_port: 8086,
                 manifest_update_threshold: 1,
                 manifest_retry_interval_secs: 300,
                 manifest_max_retries: 5,
@@ -211,6 +222,7 @@ impl Default for AppConfig {
                 max_concurrent_downloads: 3,
                 max_retries: 3,
                 auto_delete_tombstones: true,
+                trigger_port: 8086,
                 source_peers: Vec::new(),
             },
             manifest_server: ManifestServerSettings::default(),

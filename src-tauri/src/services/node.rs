@@ -209,11 +209,8 @@ impl NodeService {
         // Enable UPnP for automatic port forwarding on supported routers
         let listen_addr = format!("/ip4/0.0.0.0/tcp/{}", self.config.listen_port);
 
-        // Set up log file path
-        let log_file = std::path::Path::new(&self.config.data_dir)
-            .parent()
-            .unwrap_or(std::path::Path::new(&self.config.data_dir))
-            .join("node.log");
+        // Set up log file path (inside data_dir)
+        let log_file = std::path::Path::new(&self.config.data_dir).join("node.log");
         let log_file_str = log_file.to_string_lossy().to_string();
 
         log::info!("Archivist node logs will be written to: {}", log_file_str);

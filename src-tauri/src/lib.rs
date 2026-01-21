@@ -199,6 +199,9 @@ pub fn run() {
 
             // Configure and start the backup daemon for automatic manifest processing
             let config_for_backup = config_service.clone();
+            let backup_daemon_for_server = backup_daemon.clone();
+
+            // Spawn the main daemon loop
             tauri::async_runtime::spawn(async move {
                 // Configure source peers from settings
                 let config = config_for_backup.read().await;
@@ -208,7 +211,16 @@ pub fn run() {
                 backup_daemon.set_source_peers(source_peers).await;
                 backup_daemon.start().await;
             });
-            log::info!("Backup daemon initialized");
+
+            // Spawn the HTTP trigger server
+            let trigger_port = backup_daemon_for_server.get_trigger_port();
+            tauri::async_runtime::spawn(async move {
+                backup_daemon_for_server.start_trigger_server().await;
+            });
+            log::info!(
+                "Backup daemon initialized (trigger server on port {})",
+                trigger_port
+            );
 
             Ok(())
         })

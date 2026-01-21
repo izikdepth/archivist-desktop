@@ -56,6 +56,7 @@ impl AppState {
             app_config.backup_server.max_concurrent_downloads,
             app_config.backup_server.max_retries,
             app_config.backup_server.auto_delete_tombstones,
+            app_config.backup_server.trigger_port,
         ));
 
         // Source peers will be configured when backup daemon starts (in lib.rs setup)
