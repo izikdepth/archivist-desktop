@@ -38,6 +38,33 @@ interface NotificationSettings {
   custom_download_sound?: string | null;
 }
 
+// Configuration for a source peer (Machine B polls these for manifests)
+interface SourcePeerConfig {
+  nickname: string;
+  host: string;
+  manifest_port: number;
+  peer_id: string | null;
+  multiaddr: string | null;
+  enabled: boolean;
+}
+
+// Backup server settings (Machine B - receives backups)
+interface BackupServerSettings {
+  enabled: boolean;
+  poll_interval_secs: number;
+  max_concurrent_downloads: number;
+  max_retries: number;
+  auto_delete_tombstones: boolean;
+  source_peers: SourcePeerConfig[];
+}
+
+// Manifest server settings (Machine A - exposes manifests)
+interface ManifestServerSettings {
+  enabled: boolean;
+  port: number;
+  allowed_ips: string[];
+}
+
 interface AppConfig {
   theme: 'light' | 'dark' | 'system';
   language: string;
@@ -46,6 +73,8 @@ interface AppConfig {
   node: NodeSettings;
   sync: SyncSettings;
   notifications: NotificationSettings;
+  backup_server: BackupServerSettings;
+  manifest_server: ManifestServerSettings;
 }
 
 const defaultConfig: AppConfig = {
@@ -84,6 +113,19 @@ const defaultConfig: AppConfig = {
     custom_peer_connect_sound: null,
     custom_download_sound: null,
   },
+  backup_server: {
+    enabled: false,
+    poll_interval_secs: 30,
+    max_concurrent_downloads: 3,
+    max_retries: 3,
+    auto_delete_tombstones: true,
+    source_peers: [],
+  },
+  manifest_server: {
+    enabled: false,
+    port: 8085,
+    allowed_ips: [],
+  },
 };
 
 function Settings() {
@@ -95,6 +137,16 @@ function Settings() {
   const [appVersion, setAppVersion] = useState('');
   const [platform, setPlatform] = useState('');
   const [excludeInput, setExcludeInput] = useState('');
+  const [allowedIpInput, setAllowedIpInput] = useState('');
+  const [newSourcePeer, setNewSourcePeer] = useState<SourcePeerConfig>({
+    nickname: '',
+    host: '',
+    manifest_port: 8085,
+    peer_id: null,
+    multiaddr: null,
+    enabled: true,
+  });
+  const [showAddSourcePeer, setShowAddSourcePeer] = useState(false);
   const { marketplaceEnabled } = useFeatures();
 
   useEffect(() => {
@@ -185,6 +237,75 @@ function Settings() {
       sync: {
         ...prev.sync,
         exclude_patterns: prev.sync.exclude_patterns.filter((p) => p !== pattern),
+      },
+    }));
+  };
+
+  // Manifest Server (Machine A) - Allowed IPs management
+  const addAllowedIp = () => {
+    const ip = allowedIpInput.trim();
+    if (ip && !config.manifest_server.allowed_ips.includes(ip)) {
+      setConfig((prev) => ({
+        ...prev,
+        manifest_server: {
+          ...prev.manifest_server,
+          allowed_ips: [...prev.manifest_server.allowed_ips, ip],
+        },
+      }));
+      setAllowedIpInput('');
+    }
+  };
+
+  const removeAllowedIp = (ip: string) => {
+    setConfig((prev) => ({
+      ...prev,
+      manifest_server: {
+        ...prev.manifest_server,
+        allowed_ips: prev.manifest_server.allowed_ips.filter((i) => i !== ip),
+      },
+    }));
+  };
+
+  // Backup Server (Machine B) - Source Peers management
+  const addSourcePeer = () => {
+    if (newSourcePeer.nickname.trim() && newSourcePeer.host.trim()) {
+      setConfig((prev) => ({
+        ...prev,
+        backup_server: {
+          ...prev.backup_server,
+          source_peers: [...prev.backup_server.source_peers, { ...newSourcePeer }],
+        },
+      }));
+      setNewSourcePeer({
+        nickname: '',
+        host: '',
+        manifest_port: 8085,
+        peer_id: null,
+        multiaddr: null,
+        enabled: true,
+      });
+      setShowAddSourcePeer(false);
+    }
+  };
+
+  const removeSourcePeer = (index: number) => {
+    setConfig((prev) => ({
+      ...prev,
+      backup_server: {
+        ...prev.backup_server,
+        source_peers: prev.backup_server.source_peers.filter((_, i) => i !== index),
+      },
+    }));
+  };
+
+  const toggleSourcePeer = (index: number) => {
+    setConfig((prev) => ({
+      ...prev,
+      backup_server: {
+        ...prev.backup_server,
+        source_peers: prev.backup_server.source_peers.map((peer, i) =>
+          i === index ? { ...peer, enabled: !peer.enabled } : peer
+        ),
       },
     }));
   };
@@ -809,6 +930,319 @@ function Settings() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Manifest Server Settings (Machine A - exposes manifests for backup peers to poll) */}
+      <div className="settings-section">
+        <h3>Manifest Server</h3>
+        <p className="hint" style={{ marginBottom: '16px' }}>
+          Enable this on the machine that has files to back up (Machine A).
+          Backup peers will poll this server to discover new manifest CIDs.
+        </p>
+
+        <div className="setting-item">
+          <label>
+            <input
+              type="checkbox"
+              checked={config.manifest_server.enabled}
+              onChange={(e) =>
+                setConfig((prev) => ({
+                  ...prev,
+                  manifest_server: { ...prev.manifest_server, enabled: e.target.checked },
+                }))
+              }
+            />
+            Enable manifest discovery server
+          </label>
+          <span className="hint">
+            Exposes an HTTP endpoint for backup peers to query manifest CIDs
+          </span>
+        </div>
+
+        {config.manifest_server.enabled && (
+          <>
+            <div className="setting-item">
+              <label>Port</label>
+              <input
+                type="number"
+                value={config.manifest_server.port}
+                onChange={(e) =>
+                  setConfig((prev) => ({
+                    ...prev,
+                    manifest_server: { ...prev.manifest_server, port: parseInt(e.target.value) || 8085 },
+                  }))
+                }
+                min={1024}
+                max={65535}
+              />
+              <span className="hint">Port for the manifest discovery HTTP server (default: 8085)</span>
+            </div>
+
+            <div className="setting-item">
+              <label>Allowed IP Addresses</label>
+              <div className="input-with-button">
+                <input
+                  type="text"
+                  value={allowedIpInput}
+                  onChange={(e) => setAllowedIpInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addAllowedIp()}
+                  placeholder="e.g., 192.168.1.100"
+                />
+                <button onClick={addAllowedIp} className="small secondary">
+                  Add
+                </button>
+              </div>
+              <span className="hint">
+                Only these IP addresses can query manifests. Leave empty to deny all requests (secure by default).
+              </span>
+              {config.manifest_server.allowed_ips.length > 0 && (
+                <div className="pattern-list">
+                  {config.manifest_server.allowed_ips.map((ip) => (
+                    <span key={ip} className="pattern-tag">
+                      {ip}
+                      <button
+                        className="pattern-remove"
+                        onClick={() => removeAllowedIp(ip)}
+                        title="Remove IP"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Backup Server Settings (Machine B - receives backups by polling source peers) */}
+      <div className="settings-section">
+        <h3>Backup Server</h3>
+        <p className="hint" style={{ marginBottom: '16px' }}>
+          Enable this on the machine that receives backups (Machine B).
+          This daemon polls source peers for manifest CIDs and downloads files via P2P.
+        </p>
+
+        <div className="setting-item">
+          <label>
+            <input
+              type="checkbox"
+              checked={config.backup_server.enabled}
+              onChange={(e) =>
+                setConfig((prev) => ({
+                  ...prev,
+                  backup_server: { ...prev.backup_server, enabled: e.target.checked },
+                }))
+              }
+            />
+            Enable backup daemon
+          </label>
+          <span className="hint">
+            Automatically polls source peers for new manifests and downloads files
+          </span>
+        </div>
+
+        {config.backup_server.enabled && (
+          <>
+            <div className="setting-row">
+              <div className="setting-item">
+                <label>Poll Interval (seconds)</label>
+                <input
+                  type="number"
+                  value={config.backup_server.poll_interval_secs}
+                  onChange={(e) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      backup_server: { ...prev.backup_server, poll_interval_secs: parseInt(e.target.value) || 30 },
+                    }))
+                  }
+                  min={10}
+                  max={3600}
+                />
+                <span className="hint">How often to check source peers for new manifests</span>
+              </div>
+              <div className="setting-item">
+                <label>Max Concurrent Downloads</label>
+                <input
+                  type="number"
+                  value={config.backup_server.max_concurrent_downloads}
+                  onChange={(e) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      backup_server: { ...prev.backup_server, max_concurrent_downloads: parseInt(e.target.value) || 3 },
+                    }))
+                  }
+                  min={1}
+                  max={10}
+                />
+              </div>
+              <div className="setting-item">
+                <label>Max Retries</label>
+                <input
+                  type="number"
+                  value={config.backup_server.max_retries}
+                  onChange={(e) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      backup_server: { ...prev.backup_server, max_retries: parseInt(e.target.value) || 3 },
+                    }))
+                  }
+                  min={0}
+                  max={10}
+                />
+              </div>
+            </div>
+
+            <div className="setting-item">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={config.backup_server.auto_delete_tombstones}
+                  onChange={(e) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      backup_server: { ...prev.backup_server, auto_delete_tombstones: e.target.checked },
+                    }))
+                  }
+                />
+                Automatically delete files marked as tombstones
+              </label>
+              <span className="hint">
+                When a file is deleted on the source, remove it from local storage
+              </span>
+            </div>
+
+            {/* Source Peers */}
+            <div className="setting-item">
+              <h4>Source Peers</h4>
+              <p className="hint">
+                Peers to poll for manifest CIDs. Add the machines that have files you want to back up.
+              </p>
+            </div>
+
+            {config.backup_server.source_peers.length > 0 && (
+              <div className="source-peers-list" style={{ marginBottom: '16px' }}>
+                {config.backup_server.source_peers.map((peer, index) => (
+                  <div key={index} className="source-peer-item" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '12px',
+                    backgroundColor: 'var(--color-bg-tertiary)',
+                    borderRadius: '8px',
+                    marginBottom: '8px',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={peer.enabled}
+                      onChange={() => toggleSourcePeer(index)}
+                      title={peer.enabled ? 'Disable peer' : 'Enable peer'}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 500 }}>{peer.nickname}</div>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                        {peer.host}:{peer.manifest_port}
+                        {peer.multiaddr && <span> • Has P2P address</span>}
+                      </div>
+                    </div>
+                    <button
+                      className="small secondary"
+                      onClick={() => removeSourcePeer(index)}
+                      title="Remove peer"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!showAddSourcePeer ? (
+              <button
+                className="secondary"
+                onClick={() => setShowAddSourcePeer(true)}
+              >
+                + Add Source Peer
+              </button>
+            ) : (
+              <div className="add-source-peer-form" style={{
+                padding: '16px',
+                backgroundColor: 'var(--color-bg-tertiary)',
+                borderRadius: '8px',
+              }}>
+                <h5 style={{ marginTop: 0, marginBottom: '12px' }}>Add Source Peer</h5>
+
+                <div className="setting-item">
+                  <label>Nickname</label>
+                  <input
+                    type="text"
+                    value={newSourcePeer.nickname}
+                    onChange={(e) => setNewSourcePeer((prev) => ({ ...prev, nickname: e.target.value }))}
+                    placeholder="e.g., My Desktop"
+                  />
+                </div>
+
+                <div className="setting-row">
+                  <div className="setting-item">
+                    <label>Host / IP Address</label>
+                    <input
+                      type="text"
+                      value={newSourcePeer.host}
+                      onChange={(e) => setNewSourcePeer((prev) => ({ ...prev, host: e.target.value }))}
+                      placeholder="e.g., 192.168.1.50"
+                    />
+                  </div>
+                  <div className="setting-item">
+                    <label>Manifest Port</label>
+                    <input
+                      type="number"
+                      value={newSourcePeer.manifest_port}
+                      onChange={(e) => setNewSourcePeer((prev) => ({ ...prev, manifest_port: parseInt(e.target.value) || 8085 }))}
+                      min={1024}
+                      max={65535}
+                    />
+                  </div>
+                </div>
+
+                <div className="setting-item">
+                  <label>P2P Multiaddr (optional)</label>
+                  <input
+                    type="text"
+                    value={newSourcePeer.multiaddr || ''}
+                    onChange={(e) => setNewSourcePeer((prev) => ({ ...prev, multiaddr: e.target.value || null }))}
+                    placeholder="/ip4/192.168.1.50/tcp/8070/p2p/16Uiu2..."
+                  />
+                  <span className="hint">
+                    Multiaddr for P2P data transfer. If not provided, data is fetched from the network.
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                  <button onClick={addSourcePeer}>
+                    Add Peer
+                  </button>
+                  <button
+                    className="secondary"
+                    onClick={() => {
+                      setShowAddSourcePeer(false);
+                      setNewSourcePeer({
+                        nickname: '',
+                        host: '',
+                        manifest_port: 8085,
+                        peer_id: null,
+                        multiaddr: null,
+                        enabled: true,
+                      });
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* V2 Marketplace Settings - Only shown when enabled */}
