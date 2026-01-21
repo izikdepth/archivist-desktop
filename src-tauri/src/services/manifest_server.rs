@@ -240,6 +240,7 @@ impl ManifestServer {
 
         let routes = manifests_route
             .or(health_route)
+            .recover(handle_rejection)
             .with(warp::log("manifest_server"));
 
         // Create shutdown channel
@@ -272,6 +273,37 @@ impl ManifestServer {
 #[derive(Debug)]
 struct UnauthorizedError;
 impl warp::reject::Reject for UnauthorizedError {}
+
+/// Handle rejections and return proper HTTP status codes
+async fn handle_rejection(
+    err: warp::Rejection,
+) -> std::result::Result<impl warp::Reply, std::convert::Infallible> {
+    if err.find::<UnauthorizedError>().is_some() {
+        Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({
+                "error": "Forbidden",
+                "message": "Your IP address is not authorized to access this endpoint"
+            })),
+            warp::http::StatusCode::FORBIDDEN,
+        ))
+    } else if err.is_not_found() {
+        Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({
+                "error": "Not Found",
+                "message": "The requested endpoint does not exist"
+            })),
+            warp::http::StatusCode::NOT_FOUND,
+        ))
+    } else {
+        Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({
+                "error": "Internal Server Error",
+                "message": "An unexpected error occurred"
+            })),
+            warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+        ))
+    }
+}
 
 async fn handle_get_manifests(
     registry: Arc<RwLock<ManifestRegistry>>,
