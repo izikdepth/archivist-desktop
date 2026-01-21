@@ -133,6 +133,7 @@ struct ManifestStats {
 
 /// Manifest CID discovered from source peer
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct DiscoveredManifest {
     pub cid: String,
     pub folder_id: String,
@@ -213,6 +214,7 @@ impl BackupDaemon {
     }
 
     /// Add a source peer
+    #[allow(dead_code)]
     pub async fn add_source_peer(&self, peer: SourcePeerConfig) {
         let mut source_peers = self.source_peers.write().await;
         source_peers.push(peer);

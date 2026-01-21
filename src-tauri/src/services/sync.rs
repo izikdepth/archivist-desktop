@@ -819,6 +819,7 @@ impl SyncManager {
 
     /// Get list of folders that need manifest retry
     /// Used by backup notification background task
+    #[allow(dead_code)]
     pub async fn get_pending_manifests(&self) -> Vec<(String, String)> {
         let sync = self.sync_service.read().await;
         let mut pending = Vec::new();
@@ -835,6 +836,7 @@ impl SyncManager {
     }
 
     /// Mark manifest as successfully notified (clear pending_retry)
+    #[allow(dead_code)]
     pub async fn mark_manifest_notified(&self, folder_id: &str) -> Result<()> {
         let mut sync = self.sync_service.write().await;
         sync.acknowledge_manifest(folder_id)

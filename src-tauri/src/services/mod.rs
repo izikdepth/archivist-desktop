@@ -13,7 +13,7 @@ pub use backup::BackupService;
 pub use backup_daemon::BackupDaemon;
 pub use config::ConfigService;
 pub use files::FileService;
-pub use manifest_server::{ManifestClient, ManifestInfo, ManifestRegistry, ManifestServer, ManifestServerConfig};
+pub use manifest_server::{ManifestRegistry, ManifestServer, ManifestServerConfig};
 pub use node::NodeService;
 pub use peers::PeerService;
 pub use sync::SyncService;

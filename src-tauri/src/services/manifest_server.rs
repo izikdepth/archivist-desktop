@@ -72,6 +72,7 @@ impl ManifestRegistry {
     }
 
     /// Get manifest for a specific folder
+    #[allow(dead_code)]
     pub fn get_manifest(&self, folder_id: &str) -> Option<ManifestInfo> {
         self.manifests.get(folder_id).cloned()
     }
@@ -130,6 +131,7 @@ impl ManifestServer {
     }
 
     /// Add an allowed IP address
+    #[allow(dead_code)]
     pub async fn add_allowed_ip(&self, ip: IpAddr) {
         let mut cfg = self.config.write().await;
         cfg.allowed_ips.insert(ip);
@@ -137,6 +139,7 @@ impl ManifestServer {
     }
 
     /// Remove an allowed IP address
+    #[allow(dead_code)]
     pub async fn remove_allowed_ip(&self, ip: &IpAddr) {
         let mut cfg = self.config.write().await;
         cfg.allowed_ips.remove(ip);
@@ -144,6 +147,7 @@ impl ManifestServer {
     }
 
     /// Check if an IP is allowed
+    #[allow(dead_code)]
     async fn is_ip_allowed(&self, ip: IpAddr) -> bool {
         let cfg = self.config.read().await;
 
@@ -230,6 +234,7 @@ impl ManifestServer {
     }
 
     /// Stop the server
+    #[allow(dead_code)]
     pub fn stop(&mut self) {
         if let Some(tx) = self.shutdown_tx.take() {
             let _ = tx.send(());
