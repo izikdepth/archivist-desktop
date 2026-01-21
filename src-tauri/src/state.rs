@@ -74,7 +74,10 @@ impl AppState {
             if let Ok(ip) = ip_str.parse::<IpAddr>() {
                 allowed_ips.insert(ip);
             } else {
-                log::warn!("Invalid IP address in manifest_server.allowed_ips: {}", ip_str);
+                log::warn!(
+                    "Invalid IP address in manifest_server.allowed_ips: {}",
+                    ip_str
+                );
             }
         }
 

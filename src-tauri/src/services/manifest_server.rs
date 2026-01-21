@@ -80,7 +80,10 @@ impl ManifestRegistry {
     /// Get the discovery response
     pub fn get_discovery_response(&self) -> ManifestDiscoveryResponse {
         ManifestDiscoveryResponse {
-            peer_id: self.peer_id.clone().unwrap_or_else(|| "unknown".to_string()),
+            peer_id: self
+                .peer_id
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string()),
             manifests: self.get_all_manifests(),
             timestamp: chrono::Utc::now().to_rfc3339(),
         }
@@ -153,13 +156,19 @@ impl ManifestServer {
 
         // If no IPs are whitelisted, deny all (secure by default)
         if cfg.allowed_ips.is_empty() {
-            log::warn!("Manifest server request from {} denied: no IPs whitelisted", ip);
+            log::warn!(
+                "Manifest server request from {} denied: no IPs whitelisted",
+                ip
+            );
             return false;
         }
 
         let allowed = cfg.allowed_ips.contains(&ip);
         if !allowed {
-            log::warn!("Manifest server request from {} denied: not in whitelist", ip);
+            log::warn!(
+                "Manifest server request from {} denied: not in whitelist",
+                ip
+            );
         }
         allowed
     }
@@ -178,28 +187,30 @@ impl ManifestServer {
         let config_for_filter = self.config.clone();
 
         // Create IP whitelist filter
-        let ip_filter = warp::addr::remote()
-            .and(warp::any().map(move || config_for_filter.clone()))
-            .and_then(
-                |addr: Option<std::net::SocketAddr>, config: Arc<RwLock<ManifestServerConfig>>| async move {
-                    let ip = addr.map(|a| a.ip()).unwrap_or(IpAddr::from([0, 0, 0, 0]));
-                    let cfg = config.read().await;
+        let ip_filter =
+            warp::addr::remote()
+                .and(warp::any().map(move || config_for_filter.clone()))
+                .and_then(
+                    |addr: Option<std::net::SocketAddr>,
+                     config: Arc<RwLock<ManifestServerConfig>>| async move {
+                        let ip = addr.map(|a| a.ip()).unwrap_or(IpAddr::from([0, 0, 0, 0]));
+                        let cfg = config.read().await;
 
-                    // If no IPs whitelisted, deny
-                    if cfg.allowed_ips.is_empty() {
-                        log::warn!("Manifest request from {} denied: no IPs whitelisted", ip);
-                        return Err(warp::reject::custom(UnauthorizedError));
-                    }
+                        // If no IPs whitelisted, deny
+                        if cfg.allowed_ips.is_empty() {
+                            log::warn!("Manifest request from {} denied: no IPs whitelisted", ip);
+                            return Err(warp::reject::custom(UnauthorizedError));
+                        }
 
-                    if !cfg.allowed_ips.contains(&ip) {
-                        log::warn!("Manifest request from {} denied: not in whitelist", ip);
-                        return Err(warp::reject::custom(UnauthorizedError));
-                    }
+                        if !cfg.allowed_ips.contains(&ip) {
+                            log::warn!("Manifest request from {} denied: not in whitelist", ip);
+                            return Err(warp::reject::custom(UnauthorizedError));
+                        }
 
-                    Ok(())
-                },
-            )
-            .untuple_one();
+                        Ok(())
+                    },
+                )
+                .untuple_one();
 
         // GET /manifests - Get all manifest CIDs
         let manifests_route = warp::path("manifests")
@@ -221,8 +232,8 @@ impl ManifestServer {
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.shutdown_tx = Some(tx);
 
-        let (_, server) = warp::serve(routes)
-            .bind_with_graceful_shutdown(([0, 0, 0, 0], port), async {
+        let (_, server) =
+            warp::serve(routes).bind_with_graceful_shutdown(([0, 0, 0, 0], port), async {
                 rx.await.ok();
             });
 
@@ -272,17 +283,19 @@ impl ManifestClient {
     }
 
     /// Fetch manifests from a remote peer's manifest server
-    pub async fn fetch_manifests(&self, host: &str, port: u16) -> Result<ManifestDiscoveryResponse> {
+    pub async fn fetch_manifests(
+        &self,
+        host: &str,
+        port: u16,
+    ) -> Result<ManifestDiscoveryResponse> {
         let url = format!("http://{}:{}/manifests", host, port);
 
         log::info!("Fetching manifests from {}", url);
 
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| ArchivistError::ApiError(format!("Failed to fetch manifests: {}", e)))?;
+        let response =
+            self.client.get(&url).send().await.map_err(|e| {
+                ArchivistError::ApiError(format!("Failed to fetch manifests: {}", e))
+            })?;
 
         if !response.status().is_success() {
             return Err(ArchivistError::ApiError(format!(
@@ -294,7 +307,9 @@ impl ManifestClient {
         response
             .json::<ManifestDiscoveryResponse>()
             .await
-            .map_err(|e| ArchivistError::ApiError(format!("Failed to parse manifest response: {}", e)))
+            .map_err(|e| {
+                ArchivistError::ApiError(format!("Failed to parse manifest response: {}", e))
+            })
     }
 }
 

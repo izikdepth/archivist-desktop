@@ -184,7 +184,10 @@ pub fn run() {
                 let app_config = config.get();
 
                 if app_config.manifest_server.enabled {
-                    log::info!("Starting manifest discovery server on port {}", app_config.manifest_server.port);
+                    log::info!(
+                        "Starting manifest discovery server on port {}",
+                        app_config.manifest_server.port
+                    );
                     let mut server = manifest_server_clone.write().await;
                     if let Err(e) = server.start().await {
                         log::error!("Failed to start manifest server: {}", e);

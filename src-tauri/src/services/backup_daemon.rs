@@ -303,9 +303,18 @@ impl BackupDaemon {
                 continue;
             }
 
-            log::debug!("Polling source peer: {} ({}:{})", peer.nickname, peer.host, peer.manifest_port);
+            log::debug!(
+                "Polling source peer: {} ({}:{})",
+                peer.nickname,
+                peer.host,
+                peer.manifest_port
+            );
 
-            match self.manifest_client.fetch_manifests(&peer.host, peer.manifest_port).await {
+            match self
+                .manifest_client
+                .fetch_manifests(&peer.host, peer.manifest_port)
+                .await
+            {
                 Ok(response) => {
                     log::info!(
                         "Received {} manifests from {} (peer {})",
@@ -337,12 +346,18 @@ impl BackupDaemon {
             }
         }
 
-        log::debug!("Discovered {} manifests from source peers", discovered.len());
+        log::debug!(
+            "Discovered {} manifests from source peers",
+            discovered.len()
+        );
         Ok(discovered)
     }
 
     /// Filter manifests to only those not yet processed
-    async fn filter_unprocessed(&self, manifests: Vec<DiscoveredManifest>) -> Vec<DiscoveredManifest> {
+    async fn filter_unprocessed(
+        &self,
+        manifests: Vec<DiscoveredManifest>,
+    ) -> Vec<DiscoveredManifest> {
         let state = self.state.read().await;
         manifests
             .into_iter()
@@ -362,7 +377,10 @@ impl BackupDaemon {
                 bytes
             }
             Err(_) => {
-                log::info!("Manifest {} not in local storage, fetching from network", manifest_cid);
+                log::info!(
+                    "Manifest {} not in local storage, fetching from network",
+                    manifest_cid
+                );
                 self.api_client.download_file_network(manifest_cid).await?
             }
         };
