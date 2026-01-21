@@ -58,12 +58,7 @@ impl AppState {
             app_config.backup_server.auto_delete_tombstones,
         ));
 
-        // Configure source peers for the backup daemon
-        let source_peers = app_config.backup_server.source_peers.clone();
-        let backup_daemon_clone = backup_daemon.clone();
-        tokio::spawn(async move {
-            backup_daemon_clone.set_source_peers(source_peers).await;
-        });
+        // Source peers will be configured when backup daemon starts (in lib.rs setup)
 
         // Create manifest registry (shared between sync service and manifest server)
         let manifest_registry = Arc::new(RwLock::new(ManifestRegistry::new()));
@@ -87,17 +82,9 @@ impl AppState {
             allowed_ips,
         };
 
-        let manifest_server = ManifestServer::new(manifest_registry.clone());
-        // Config will be applied when server starts
+        let manifest_server =
+            ManifestServer::with_config(manifest_registry.clone(), manifest_server_config);
         let manifest_server = Arc::new(RwLock::new(manifest_server));
-
-        // Store config for later use when starting server
-        let manifest_server_clone = manifest_server.clone();
-        let config_clone = manifest_server_config.clone();
-        tokio::spawn(async move {
-            let server = manifest_server_clone.write().await;
-            server.update_config(config_clone).await;
-        });
 
         Self {
             node: Arc::new(RwLock::new(NodeService::with_config(node_config))),

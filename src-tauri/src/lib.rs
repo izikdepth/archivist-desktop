@@ -197,8 +197,15 @@ pub fn run() {
                 }
             });
 
-            // Start the backup daemon for automatic manifest processing
+            // Configure and start the backup daemon for automatic manifest processing
+            let config_for_backup = config_service.clone();
             tauri::async_runtime::spawn(async move {
+                // Configure source peers from settings
+                let config = config_for_backup.read().await;
+                let source_peers = config.get().backup_server.source_peers.clone();
+                drop(config);
+
+                backup_daemon.set_source_peers(source_peers).await;
                 backup_daemon.start().await;
             });
             log::info!("Backup daemon initialized");

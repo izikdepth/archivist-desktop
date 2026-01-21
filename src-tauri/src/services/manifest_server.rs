@@ -119,6 +119,7 @@ pub struct ManifestServer {
 }
 
 impl ManifestServer {
+    #[allow(dead_code)]
     pub fn new(registry: Arc<RwLock<ManifestRegistry>>) -> Self {
         Self {
             registry,
@@ -127,7 +128,20 @@ impl ManifestServer {
         }
     }
 
+    /// Create a new manifest server with the given configuration
+    pub fn with_config(
+        registry: Arc<RwLock<ManifestRegistry>>,
+        config: ManifestServerConfig,
+    ) -> Self {
+        Self {
+            registry,
+            config: Arc::new(RwLock::new(config)),
+            shutdown_tx: None,
+        }
+    }
+
     /// Update server configuration
+    #[allow(dead_code)]
     pub async fn update_config(&self, config: ManifestServerConfig) {
         let mut cfg = self.config.write().await;
         *cfg = config;
