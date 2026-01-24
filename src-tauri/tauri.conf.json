@@ -30,7 +30,7 @@
       "tooltip": "Archivist - Decentralized Storage"
     },
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: https://asset.localhost data:; media-src 'self' asset: https://asset.localhost; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.github.com https://github.com"
+      "csp": "default-src 'self'; img-src 'self' asset: https://asset.localhost data:; media-src 'self' asset: https://asset.localhost blob: data:; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.github.com https://github.com"
     }
   },
   "plugins": {
@@ -51,7 +51,9 @@
       "sidecars/archivist"
     ],
     "resources": {
-      "sidecars/*.dll": "./"
+      "sidecars/*.dll": "./",
+      "resources/intro.webm": "./",
+      "resources/intro.mp4": "./"
     },
     "icon": [
       "icons/32x32.png",
@@ -66,10 +68,16 @@
     "copyright": "Copyright © 2024 BasedMint",
     "linux": {
       "appimage": {
-        "bundleMediaFramework": false
+        "bundleMediaFramework": true
       },
       "deb": {
-        "depends": [],
+        "depends": [
+          "gstreamer1.0-plugins-base",
+          "gstreamer1.0-plugins-good",
+          "gstreamer1.0-plugins-bad",
+          "gstreamer1.0-plugins-ugly",
+          "gstreamer1.0-libav"
+        ],
         "postInstallScript": "scripts/postinst.sh"
       }
     },

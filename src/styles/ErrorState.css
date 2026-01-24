@@ -1,0 +1,193 @@
+/* ErrorState component styles */
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--spacing-xl);
+  background-color: var(--term-panel);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--term-border);
+}
+
+.error-state-icon {
+  margin-bottom: var(--spacing-md);
+}
+
+.error-icon {
+  color: var(--term-text-dim);
+}
+
+.error-icon.error {
+  color: var(--error);
+  filter: drop-shadow(0 0 10px var(--error-glow));
+}
+
+.error-icon.warning {
+  color: var(--amber);
+  filter: drop-shadow(0 0 10px var(--amber-glow));
+}
+
+.error-icon.info {
+  color: var(--ui-green);
+}
+
+.error-icon.offline {
+  color: var(--term-text-dim);
+}
+
+.error-state-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--term-text-bright);
+  margin-bottom: var(--spacing-sm);
+}
+
+.error-state-message {
+  color: var(--term-text);
+  margin-bottom: var(--spacing-md);
+  max-width: 400px;
+}
+
+.error-state-details {
+  background-color: var(--term-dark);
+  border: 1px solid var(--term-border);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-lg);
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.error-state-details code {
+  font-size: 0.8125rem;
+  font-family: var(--font-mono);
+  color: var(--error);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.error-state-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn-error-action {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--duration-normal) var(--ease-out);
+  text-decoration: none;
+  border: 1px solid var(--ui-green);
+}
+
+.btn-error-action.primary {
+  background-color: var(--ui-green);
+  color: var(--term-black);
+  border-color: var(--ui-green);
+}
+
+.btn-error-action.primary:hover {
+  background-color: var(--phosphor);
+  border-color: var(--phosphor);
+  box-shadow: 0 0 15px var(--phosphor-glow);
+}
+
+.btn-error-action.secondary {
+  background-color: transparent;
+  color: var(--term-text);
+  border: 1px solid var(--term-border);
+}
+
+.btn-error-action.secondary:hover {
+  color: var(--phosphor);
+  border-color: var(--phosphor);
+  box-shadow: 0 0 10px var(--phosphor-glow);
+}
+
+/* Inline error banner with CTAs */
+.error-banner-enhanced {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background-color: var(--error-dark);
+  border: 1px solid var(--error-dim);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.error-banner-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex: 1;
+  min-width: 0;
+}
+
+.error-banner-icon {
+  flex-shrink: 0;
+  color: var(--error);
+}
+
+.error-banner-message {
+  color: var(--error);
+  font-size: 0.9375rem;
+  margin: 0;
+}
+
+.error-banner-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-shrink: 0;
+}
+
+.btn-error-banner {
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  background-color: transparent;
+  color: var(--error-dim);
+  border: 1px solid var(--error-dim);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--duration-normal) var(--ease-out);
+  text-decoration: none;
+}
+
+.btn-error-banner:hover {
+  color: var(--error);
+  border-color: var(--error);
+  box-shadow: 0 0 10px var(--error-glow);
+}
+
+.btn-error-banner.secondary {
+  background-color: transparent;
+  color: var(--term-text);
+  border: 1px solid var(--term-border);
+}
+
+.btn-error-banner.secondary:hover {
+  color: var(--phosphor);
+  border-color: var(--phosphor);
+  box-shadow: 0 0 10px var(--phosphor-glow);
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .error-banner-enhanced {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .error-banner-actions {
+    justify-content: flex-end;
+  }
+}

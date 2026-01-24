@@ -21,6 +21,9 @@ Tauri v2 desktop application for decentralized file storage with P2P sync capabi
 15. [Backup Server Daemon](#backup-server-daemon)
 16. [Windows Development](#windows-development)
 17. [User Experience Features](#user-experience-features)
+    - [Onboarding System](#onboarding-system)
+    - [Auto-Trigger Download on CID Paste](#auto-trigger-download-on-cid-paste)
+    - [Sound Notifications](#sound-notifications)
 18. [Troubleshooting](#troubleshooting)
 19. [Security](#security)
 20. [Version History](#version-history)
@@ -406,14 +409,14 @@ const { marketplaceEnabled, zkProofsEnabled } = useFeatures();
 
 ### Port Architecture
 
-The application uses **two separate ports** for P2P networking:
+The application uses **four ports** for P2P networking and backup functionality:
 
-#### Discovery Port (UDP - Default: 8090)
-- **Purpose**: Peer discovery via DHT (Distributed Hash Table) and mDNS
-- **Protocol**: UDP
-- **Command-line flag**: `--disc-port=8090`
-- **Used for**: Finding other nodes on the network, announcing presence
-- **Configuration**: `discovery_port` in NodeConfig/NodeSettings
+| Port | Protocol | Default | Purpose |
+|------|----------|---------|---------|
+| Listen Port | TCP | 8070 | P2P connections and file transfers |
+| Discovery Port | UDP | 8090 | DHT/mDNS peer discovery |
+| Manifest Server | TCP | 8085 | Exposes folder manifests for backup (Machine A) |
+| Backup Trigger | TCP | 8086 | Receives backup notifications (Machine B) |
 
 #### Listen Port (TCP - Default: 8070)
 - **Purpose**: Actual P2P data connections and file transfers
@@ -422,12 +425,35 @@ The application uses **two separate ports** for P2P networking:
 - **Used for**: Establishing connections, transferring files, syncing data
 - **Configuration**: `listen_port` in NodeConfig/NodeSettings
 
-#### Why Two Ports?
+#### Discovery Port (UDP - Default: 8090)
+- **Purpose**: Peer discovery via DHT (Distributed Hash Table) and mDNS
+- **Protocol**: UDP
+- **Command-line flag**: `--disc-port=8090`
+- **Used for**: Finding other nodes on the network, announcing presence
+- **Configuration**: `discovery_port` in NodeConfig/NodeSettings
+
+#### Manifest Server Port (TCP - Default: 8085)
+- **Purpose**: HTTP server exposing folder manifest CIDs for backup discovery
+- **Protocol**: TCP (HTTP)
+- **Used for**: Backup server polling for new manifests from source peers
+- **Configuration**: Settings → Manifest Server → Port
+- **Security**: IP whitelist restricts access to authorized backup servers
+- **Required on**: Machine A (source/primary) only
+
+#### Backup Trigger Port (TCP - Default: 8086)
+- **Purpose**: Receives backup trigger notifications from source peers
+- **Protocol**: TCP (HTTP)
+- **Used for**: Immediate backup notification when new manifest available
+- **Configuration**: Settings → Backup Server
+- **Required on**: Machine B (backup server) only
+
+#### Why Multiple Ports?
 
 1. **Protocol Separation**: UDP for lightweight discovery, TCP for reliable data transfer
 2. **Network Flexibility**: Some networks may treat UDP and TCP differently
 3. **Firewall Optimization**: Allows granular control over discovery vs data traffic
 4. **Port Forwarding**: Can forward only the listen port for direct connections while using discovery locally
+5. **Backup Architecture**: Separate ports for manifest discovery (8085) and backup triggering (8086)
 
 #### Multiaddr Format
 
@@ -721,6 +747,32 @@ git push origin main --tags
 # Go to: https://github.com/basedmint/archivist-desktop/actions
 ```
 
+### Manual Release Build (Testing)
+
+To build release artifacts from any branch without creating a version tag:
+
+```bash
+# Trigger release workflow manually from current branch
+gh workflow run release.yml --ref feature/your-branch
+
+# Check workflow status
+gh run list --workflow=release.yml --limit 3
+
+# Watch the build progress
+gh run watch <run-id>
+```
+
+This is useful for:
+- Testing release builds before tagging a final version
+- Creating release candidates from feature branches
+- Debugging platform-specific build issues
+
+The workflow builds for all 4 platforms:
+- macOS ARM64 (`aarch64-apple-darwin`)
+- macOS Intel (`x86_64-apple-darwin`)
+- Linux x64 (`x86_64-unknown-linux-gnu`)
+- Windows x64 (`x86_64-pc-windows-msvc`)
+
 ### Running CI Checks Locally
 
 ```bash
@@ -844,16 +896,25 @@ A diagnostics panel is available on the Dashboard:
 
 ### Firewall Configuration
 
-Open **both ports** in your firewall for full P2P functionality:
+Open the following ports in your firewall for full functionality:
+
+**Core P2P (All Machines):**
+- **Port 8070 (TCP)**: P2P connections and file transfers
 - **Port 8090 (UDP)**: Discovery/DHT
-- **Port 8070 (TCP)**: P2P connections
+
+**Backup System (Optional):**
+- **Port 8085 (TCP)**: Manifest server (Machine A/Source only)
+- **Port 8086 (TCP)**: Backup trigger (Machine B/Backup Server only)
 
 #### Linux (UFW)
 ```bash
-# Discovery port (UDP)
-sudo ufw allow 8090/udp
-# Listen port (TCP)
-sudo ufw allow 8070/tcp
+# Core P2P ports (all machines)
+sudo ufw allow 8070/tcp  # P2P connections
+sudo ufw allow 8090/udp  # Discovery
+
+# Backup ports (optional - based on role)
+sudo ufw allow 8085/tcp  # Machine A: Manifest server
+sudo ufw allow 8086/tcp  # Machine B: Backup trigger
 ```
 
 #### macOS
@@ -862,20 +923,29 @@ System Preferences → Security & Privacy → Firewall → Allow Archivist Deskt
 #### Windows
 ```powershell
 # Run as Administrator
-# Discovery port (UDP)
-netsh advfirewall firewall add rule name="Archivist Discovery" dir=in action=allow protocol=udp localport=8090
-# Listen port (TCP)
+# Core P2P ports (all machines)
 netsh advfirewall firewall add rule name="Archivist P2P" dir=in action=allow protocol=tcp localport=8070
+netsh advfirewall firewall add rule name="Archivist Discovery" dir=in action=allow protocol=udp localport=8090
+
+# Backup ports (optional - based on role)
+netsh advfirewall firewall add rule name="Archivist Manifest" dir=in action=allow protocol=tcp localport=8085
+netsh advfirewall firewall add rule name="Archivist Backup" dir=in action=allow protocol=tcp localport=8086
 ```
 
 ### Cross-Network Testing
 
 For internet connections, configure port forwarding on your router:
-1. Forward **both ports** to your machine's local IP:
-   - Port 8090 (UDP) - Discovery
+
+**All Machines:**
+1. Forward core P2P ports to your machine's local IP:
    - Port 8070 (TCP) - P2P connections
+   - Port 8090 (UDP) - Discovery
 2. Find your public IP: `curl ifconfig.me`
 3. Your multiaddr uses the **listen port** (TCP): `/ip4/YOUR_PUBLIC_IP/tcp/8070/p2p/YOUR_PEER_ID`
+
+**Backup System (if using):**
+- **Machine A (Source):** Also forward port 8085 (TCP) for manifest server
+- **Machine B (Backup Server):** Also forward port 8086 (TCP) for backup trigger
 
 **Note**: The multiaddr only includes the listen port (8070). The discovery port (8090) is used automatically by DHT and doesn't appear in multiaddrs.
 
@@ -2394,6 +2464,234 @@ Example log search workflow:
 
 ## User Experience Features
 
+### Onboarding System
+
+**Location:** [src/pages/Onboarding.tsx](src/pages/Onboarding.tsx), [src/hooks/useOnboarding.ts](src/hooks/useOnboarding.ts)
+
+The application includes a guided onboarding flow for first-time users, designed to complete the first backup in ≤30 seconds with ≤3 user decisions.
+
+#### Onboarding Flow
+
+1. **Splash Screen** - Animated branding (video or CSS fallback)
+2. **Welcome Screen** - Introduction with "Get Started" CTA
+3. **Node Starting** - Auto-starts node with progress indicator
+4. **Folder Selection** - "Quick Backup" (default folder) or "Choose Folder"
+5. **Syncing Progress** - Timeline showing sync status with CID proof
+
+#### Video Splash with CSS Fallback
+
+The splash screen shows a branding video on Windows/macOS, or a CSS-animated splash on Linux (due to WebKitGTK limitations).
+
+**Platform-Specific Behavior:**
+- **Linux**: Immediately shows CSS fallback (WebKitGTK video playback is unreliable)
+- **Windows**: Video plays via WebView2 (built-in codecs)
+- **macOS**: Video plays via Safari WebView (built-in codecs)
+
+**Video Files** (bundled as Tauri resources):
+- `src-tauri/resources/intro.webm` - VP8 codec, 1.7MB (primary)
+- `src-tauri/resources/intro.mp4` - H.264 codec, 34MB (fallback)
+
+**CSS Fallback Animation:**
+- Terminal aesthetic dark background with phosphor green accents
+- Breathing scale animation with intensifying glow effect
+- Animated title slide-up with tagline
+- 3-second duration before auto-advance
+
+**CSS Fallback Triggers:**
+- Linux platform detected (immediate)
+- Video error on other platforms
+- Video load timeout (2 seconds) on other platforms
+
+**Implementation:**
+
+```typescript
+// Platform detection with immediate Linux fallback
+function SplashScreen({ onComplete, onSkip }: SplashScreenProps) {
+  const [showFallback, setShowFallback] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const isTauri = !!window.__TAURI_INTERNALS__;
+    const isLinux = navigator.userAgent.toLowerCase().includes('linux');
+
+    if (isTauri && isLinux) {
+      // Linux: Use CSS fallback directly (WebKitGTK video is unreliable)
+      setShowFallback(true);
+      return;
+    }
+
+    // Windows/macOS: Load video from Tauri resources
+    const loadVideo = async () => {
+      const webmPath = await resolveResource('intro.webm');
+      setVideoUrl(convertFileSrc(webmPath));
+    };
+    loadVideo();
+  }, []);
+
+  if (showFallback) return <CSSAnimatedSplash onComplete={onComplete} />;
+
+  return <video src={videoUrl} autoPlay muted playsInline onEnded={onComplete} />;
+}
+```
+
+**CSS Animation Styles** ([src/styles/Onboarding.css](src/styles/Onboarding.css)):
+
+```css
+.splash-fallback {
+  background: var(--terminal-bg);
+}
+
+.splash-icon {
+  color: var(--phosphor);
+  filter: drop-shadow(0 0 20px var(--phosphor-glow));
+  animation: splashBreathe 3s ease-in-out infinite;
+}
+
+@keyframes splashBreathe {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 20px var(--phosphor-glow));
+  }
+  50% {
+    transform: scale(1.08);
+    filter: drop-shadow(0 0 40px rgba(0, 255, 65, 0.7));
+  }
+}
+
+.splash-title {
+  font-size: 3rem;
+  animation: splashSlideUp 0.6s ease-out 0.3s both;
+}
+```
+
+**Welcome Screen Animation:**
+
+The welcome screen uses a glow-intensity breathing animation (not opacity-based) to avoid visual artifacts:
+
+```css
+.welcome-screen .welcome-icon svg {
+  filter: drop-shadow(0 0 15px var(--phosphor-glow));
+  animation: welcomeGlow 3s ease-in-out infinite;
+}
+
+@keyframes welcomeGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 15px var(--phosphor-glow));
+  }
+  50% {
+    filter: drop-shadow(0 0 30px rgba(0, 255, 65, 0.6));
+  }
+}
+```
+
+#### Quickstart Folder
+
+When user selects "Quick Backup", the app:
+1. Creates `~/Documents/Archivist Quickstart/` folder
+2. Adds a `welcome.txt` sample file
+3. Adds folder to watch list (gracefully handles if already watched)
+4. Shows sync progress with CID
+
+**Graceful Error Handling:**
+
+If the quickstart folder is already being watched (e.g., user re-runs onboarding), the error is silently ignored and the flow continues:
+
+```typescript
+try {
+  await addWatchFolder(path);
+} catch (watchErr) {
+  const errMsg = watchErr instanceof Error ? watchErr.message : String(watchErr);
+  if (!errMsg.includes('already being watched')) {
+    throw watchErr; // Re-throw non-duplicate errors
+  }
+  // Folder already watched - just continue to syncing
+}
+```
+
+**Backend Command** ([src-tauri/src/commands/sync.rs](src-tauri/src/commands/sync.rs)):
+
+```rust
+#[tauri::command]
+pub async fn create_quickstart_folder() -> Result<String, ArchivistError> {
+    // Creates folder in Documents with welcome.txt
+}
+```
+
+#### Onboarding State Management
+
+**Hook:** [src/hooks/useOnboarding.ts](src/hooks/useOnboarding.ts)
+
+```typescript
+export type OnboardingStep = 'splash' | 'welcome' | 'node-starting' | 'folder-select' | 'syncing';
+
+export function useOnboarding() {
+  // First-run detection via localStorage
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    return !localStorage.getItem('onboarding_complete');
+  });
+
+  const completeOnboarding = () => {
+    localStorage.setItem('onboarding_complete', 'true');
+    setShowOnboarding(false);
+  };
+
+  // ... step tracking, error handling
+}
+```
+
+#### Post-Onboarding Navigation
+
+After completing onboarding, users are redirected to the Dashboard. This uses a localStorage flag to communicate across Router context switches:
+
+**Files:** [src/App.tsx](src/App.tsx)
+
+```typescript
+const REDIRECT_AFTER_ONBOARDING_KEY = 'archivist_redirect_to_dashboard';
+
+// Component inside main Router that handles redirect
+function OnboardingRedirect() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const shouldRedirect = localStorage.getItem(REDIRECT_AFTER_ONBOARDING_KEY);
+    if (shouldRedirect === 'true') {
+      localStorage.removeItem(REDIRECT_AFTER_ONBOARDING_KEY);
+      if (location.pathname !== '/') {
+        navigate('/', { replace: true });
+      }
+    }
+  }, [navigate, location.pathname]);
+
+  return null;
+}
+
+// Wrapper functions set the flag before completing onboarding
+const handleCompleteOnboarding = () => {
+  localStorage.setItem(REDIRECT_AFTER_ONBOARDING_KEY, 'true');
+  completeOnboarding();
+};
+```
+
+**Why localStorage?** The app switches between two separate Router contexts (onboarding vs main app), so React Router's navigation hooks can't be used directly. The localStorage flag persists across the context switch.
+
+#### Reset Onboarding
+
+Users can reset onboarding via Settings → Developer → "Reset Onboarding". This clears the `onboarding_complete` flag and reloads the app.
+
+#### Related Files
+
+| File | Purpose |
+|------|---------|
+| [src/pages/Onboarding.tsx](src/pages/Onboarding.tsx) | Main onboarding component with all screens |
+| [src/hooks/useOnboarding.ts](src/hooks/useOnboarding.ts) | Onboarding state management hook |
+| [src/styles/Onboarding.css](src/styles/Onboarding.css) | Onboarding styles including CSS fallback animation |
+| [src/App.tsx](src/App.tsx) | OnboardingRedirect component for post-onboarding navigation |
+| [src-tauri/resources/intro.webm](src-tauri/resources/intro.webm) | Branding video (WebM/VP8, 1.7MB) |
+| [src-tauri/resources/intro.mp4](src-tauri/resources/intro.mp4) | Branding video (MP4/H.264, 34MB) |
+
+---
+
 ### Auto-Trigger Download on CID Paste
 
 **Location:** [src/pages/Files.tsx](src/pages/Files.tsx)
@@ -2702,6 +3000,26 @@ Edit `.husky/pre-commit` to skip some checks during development:
 
 See [Windows Development](#windows-development) section for technical details.
 
+### Release Build: Video Not Playing (Linux)
+
+**Problem:** Splash screen video plays in dev mode and debug builds but fails in release builds.
+
+**Cause:** Tauri's asset protocol behaves differently between debug and release builds. Direct `<source>` paths in video elements aren't properly served in release mode, even with correct CSP settings.
+
+**Solution:** Fixed in v0.2.0 by loading video as blob URL instead of direct source paths:
+1. Video is fetched using `fetch()` API
+2. Response is converted to a blob
+3. Blob URL is created with `URL.createObjectURL()`
+4. Blob URL is used as video `src` attribute
+5. Falls back to CSS animation if blob loading fails
+
+**Technical Details:**
+- The CSP allows `blob:` in `media-src`
+- `fetch()` can access bundled assets in both debug and release mode
+- Blob URLs bypass Tauri's asset protocol differences entirely
+
+**Files:** [src/pages/Onboarding.tsx](src/pages/Onboarding.tsx) - `loadVideoAsBlob()` function and `SplashScreen` component
+
 ## Security
 
 ### Security Architecture
@@ -2773,7 +3091,189 @@ Sidecar binaries include SHA256 checksum verification in download script.
 
 ## Version History
 
-### v0.1.2 (Current)
+### v0.2.0 (Current)
+
+Major UI/UX overhaul focused on simplifying the first-run experience.
+
+#### Onboarding System
+
+- **New 5-step onboarding wizard** for first-time users
+  - Splash screen with video or CSS-animated fallback
+  - Welcome screen with value proposition
+  - Auto-starting node with progress indicator
+  - Folder selection (Quick Backup or Choose Folder)
+  - Sync progress timeline with completion confirmation
+- **Goal**: First backup complete in ≤30 seconds with ≤3 user decisions
+- **Files**: [src/pages/Onboarding.tsx](src/pages/Onboarding.tsx), [src/hooks/useOnboarding.ts](src/hooks/useOnboarding.ts), [src/styles/Onboarding.css](src/styles/Onboarding.css)
+
+#### Video Splash with CSS Fallback
+
+- **Video formats**: WebM (VP8, 1.7MB) primary, MP4 (H.264, 34MB) fallback
+- **CSS fallback**: Terminal aesthetic with breathing scale animation and phosphor green glow
+- **Welcome screen**: Glow-intensity breathing animation (avoids opacity-based visual artifacts)
+- **Platform handling**:
+  - Windows/macOS: Video plays (built-in codecs)
+  - Linux: CSS fallback immediately (WebKitGTK video unreliable)
+- **Timeout**: 2 seconds before showing CSS fallback (Windows/macOS only)
+- **Files**: [src-tauri/resources/intro.webm](src-tauri/resources/intro.webm), [src-tauri/resources/intro.mp4](src-tauri/resources/intro.mp4)
+
+#### Post-Onboarding Navigation
+
+- **Fix**: After onboarding completes, user is now redirected to Dashboard (was incorrectly going to Settings)
+- **Implementation**: Uses localStorage flag to communicate across Router context switches
+- **Component**: `OnboardingRedirect` in [src/App.tsx](src/App.tsx) handles the redirect inside the main Router
+
+#### Graceful Error Handling
+
+- **Quick Backup**: If quickstart folder is already being watched, error is silently ignored and flow continues
+- **Use case**: Users re-running onboarding after reset don't see duplicate folder errors
+
+#### CSP Fix for Bundled Video Playback
+
+Video playback failed in bundled builds (release/debug) but worked in dev mode. The fix was adding `blob:` and `data:` to the Content Security Policy's `media-src` directive.
+
+**Root Cause**: When Tauri serves bundled assets via the `tauri://` protocol, WebKitGTK internally converts media to blob/data URLs. The original CSP blocked these URLs.
+
+**Fix** (in [src-tauri/tauri.conf.json](src-tauri/tauri.conf.json)):
+```diff
+- media-src 'self' asset: https://asset.localhost
++ media-src 'self' asset: https://asset.localhost blob: data:
+```
+
+**Behavior by mode**:
+| Mode | Video URL | CSP Match |
+|------|-----------|-----------|
+| Dev (`pnpm tauri dev`) | `http://localhost:1420/intro.webm` | `'self'` |
+| Bundled (release/debug) | Internal blob/data conversion | `blob: data:` |
+
+#### Navigation Restructure
+
+- **Primary section**: Dashboard, Backups (renamed from Sync), Restore (renamed from Files)
+- **Devices section**: My Devices, Add Device (new pages)
+- **Advanced section**: Collapsible accordion containing Logs, Backup Server, Settings
+- **Peers page removed**: Functionality consolidated into Devices page (route kept at `/peers` for backwards compatibility)
+- **New files**: [src/pages/Devices.tsx](src/pages/Devices.tsx), [src/pages/AddDevice.tsx](src/pages/AddDevice.tsx), [src/components/NavAccordion.tsx](src/components/NavAccordion.tsx)
+
+#### Peers → Devices Consolidation
+
+The Peers page was redundant with the Devices page - both used the same `usePeers()` hook and `connectPeer()` function. The consolidation merged all peer management into the Devices page.
+
+**Features added to Devices page**:
+- **Disconnect button**: Disconnect from connected peers
+- **Saved Devices section**: Shows offline/disconnected peers with Reconnect and Remove buttons
+- **Latency display**: Shows ping time for connected peers
+- **Refresh button**: Manually refresh peer list
+
+**NavLink fix**: Added `end` prop to "My Devices" NavLink to prevent both "My Devices" and "Add Device" from highlighting when on `/devices/add`.
+
+**Files changed**:
+- [src/pages/Devices.tsx](src/pages/Devices.tsx) - Added peer management actions
+- [src/styles/Devices.css](src/styles/Devices.css) - Added styles for new elements
+- [src/App.tsx](src/App.tsx) - Removed Peers from nav, added `end` prop
+
+#### Backups Page Description Update
+
+Updated "How Sync Works" to "How Backups Work" with accurate description of the manifest-based backup workflow:
+- Changed terminology from "sync" to "backup"
+- Replaced passive P2P sharing description with manifest-based backup explanation
+- Added pointer to Settings → Backup Server for configuration
+
+#### Dashboard Enhancement
+
+- **Card Layout Order** (BasicView): Status Hero → Quick Stats → Share Your Connection → Next Steps → Recent Activity
+- **NextSteps panel**: Post-onboarding guidance cards (Add backup folder, Connect a peer)
+- **Quick Stats**: Connected Peers (clickable → Devices), Storage Used, Last Backup (clickable → Backups)
+- **Recent Activity**: Shows last 3 uploaded files
+- **Files**: [src/components/NextSteps.tsx](src/components/NextSteps.tsx), [src/styles/NextSteps.css](src/styles/NextSteps.css)
+
+#### Dashboard Peer Count Fix
+
+**Problem**: Connected Peers on Dashboard always showed 0, even when peers were connected and visible on the Devices page.
+
+**Root Cause**: The `status.peerCount` from `useNode` hook was never populated by the backend - the `/debug/info` API endpoint doesn't include peer count. The peer data is retrieved via a separate `get_peers` command used by the `usePeers` hook.
+
+**Solution**: Import `usePeers` hook in Dashboard and calculate the connected peer count directly:
+```typescript
+const { peerList } = usePeers();
+const connectedPeerCount = peerList.peers.filter(p => p.connected).length;
+```
+
+**Changes**:
+- Added `usePeers` import to [src/pages/Dashboard.tsx](src/pages/Dashboard.tsx)
+- Added `connectedPeerCount` prop to `BasicViewProps` and `AdvancedViewProps`
+- Updated BasicView and AdvancedView to use actual peer count
+- Fixed `hasConnectedPeers` check for NextSteps panel
+- Made Connected Peers stat clickable (navigates to `/devices`)
+
+#### Linux Video Playback (Known Limitation)
+
+**Problem**: Video splash doesn't play in release builds on Linux with WebKitGTK, even with GStreamer plugins installed and correct CSP configuration.
+
+**Approaches Tried** (none worked on Linux):
+1. **Standard paths** (`/intro.webm`) - Video fails to load
+2. **Asset protocol URLs** (`https://asset.localhost/intro.webm`) - Video fails to load
+3. **Tauri resources** with `resolveResource()` + `convertFileSrc()` - Video fails to load
+4. **Blob URL loading** via `fetch()` - Video starts but gets stuck partway
+5. **VP8 codec** instead of VP9 - Same behavior
+6. **CSP fixes** - Added `blob: data:` to `media-src` - Didn't help
+
+**Root Cause**: WebKitGTK's video playback is fundamentally unreliable in Tauri applications on Linux. Even with:
+- All GStreamer plugins installed (`gstreamer1.0-plugins-base/good/bad/ugly`, `gstreamer1.0-libav`)
+- Correct CSP configuration
+- Multiple URL patterns and codec formats
+
+The video either fails to load entirely or gets stuck during playback.
+
+**Solution**: Platform detection with immediate CSS fallback on Linux.
+
+```typescript
+// In src/pages/Onboarding.tsx
+const isLinux = navigator.userAgent.toLowerCase().includes('linux');
+
+if (isTauri && isLinux) {
+  // On Linux, WebKitGTK video playback is unreliable
+  // Use CSS fallback directly for a better, faster experience
+  console.log('SplashScreen: Linux detected, using CSS fallback');
+  setShowFallback(true);
+  return;
+}
+```
+
+**Current behavior**:
+| Platform | Splash Screen |
+|----------|--------------|
+| **Linux** | CSS animated fallback (immediate) |
+| **Windows** | Video playback via WebView2 |
+| **macOS** | Video playback via Safari WebView |
+| **Dev mode** | Video playback via Vite dev server |
+
+**Video files bundled** (for Windows/macOS):
+- `src-tauri/resources/intro.webm` - VP8 codec, 1.7MB
+- `src-tauri/resources/intro.mp4` - H.264 codec, 34MB
+
+**GStreamer packages** (still included in .deb for other media features):
+- `gstreamer1.0-plugins-base`
+- `gstreamer1.0-plugins-good`
+- `gstreamer1.0-plugins-bad`
+- `gstreamer1.0-plugins-ugly`
+- `gstreamer1.0-libav`
+
+#### README.md Updates
+
+- **Added Alpha/Pilot Program Disclaimer**: Prominent warning at top of README about data loss risks
+- **Updated Tech Stack**: Converted to table format, updated versions (Node.js 20+, pnpm v10+, Rust 1.77.2+)
+- **Expanded Features List**: Added Guided Onboarding, Backup Server, Sound Notifications
+- **Updated Architecture Diagram**: Reflects new navigation (Backups, Restore, Devices) and Backup Daemon
+- **Expanded Project Structure**: Added all new components, hooks, pages, and services
+- **Added Configuration Tables**: Node Configuration and Backup Server Configuration with defaults
+- **Improved Network Setup**: Converted to table format for clarity
+- **Added Key Features Table**: Includes n:1 Fan-In and Content Deduplication
+- **Added Troubleshooting Section**: Common issues table and log file locations
+- **Added Resources Section**: Links to repositories and CLAUDE.md
+
+---
+
+### v0.1.2
 - **Feature:** Added built-in Logs viewer for real-time node log monitoring
   - New Logs page with auto-refresh and auto-scroll capabilities
   - Line count control (100, 500, 1000, 5000)
@@ -2907,14 +3407,24 @@ Sidecar binaries include SHA256 checksum verification in download script.
 | `src-tauri/src/state.rs` | AppState initialization and config sync |
 | `src/hooks/useNode.ts` | Node state management hook |
 | `src/hooks/useSync.ts` | Sync state management hook |
+| `src/hooks/useOnboarding.ts` | Onboarding state management (first-run detection, steps) |
 | `src/hooks/useSoundNotifications.ts` | Sound notification event listener hook |
 | `src/lib/cidValidation.ts` | CID format validation utility |
-| `src/pages/Dashboard.tsx` | Main UI with diagnostics panel |
+| `src/pages/Dashboard.tsx` | Main UI with diagnostics panel and NextSteps |
 | `src/pages/Files.tsx` | File management with auto-download on paste |
+| `src/pages/Onboarding.tsx` | First-run wizard with video/CSS splash |
+| `src/pages/Devices.tsx` | Device management (this device + connected devices) |
+| `src/pages/AddDevice.tsx` | Step-by-step device pairing wizard |
 | `src/pages/Logs.tsx` | Real-time node logs viewer |
 | `src/pages/Settings.tsx` | App configuration with notification settings |
+| `src/components/NextSteps.tsx` | Post-onboarding guidance cards |
+| `src/components/NavAccordion.tsx` | Collapsible navigation section |
+| `src/styles/Onboarding.css` | Onboarding styles with CSS fallback animation |
+| `src/styles/NextSteps.css` | NextSteps component styling |
 | `src/styles/Logs.css` | Logs page styling |
 | `src/styles/App.css` | Global styles, dropdown contrast fixes, CID validation styling |
+| `public/intro.webm` | Splash video (WebM/VP9, 7.3MB) |
+| `public/intro.mp4` | Splash video (MP4/H.264, 33MB) |
 | `scripts/download-sidecar.sh` | Sidecar binary downloader |
 | `src-tauri/tauri.conf.json` | Tauri app configuration |
 | `.github/workflows/ci.yml` | CI pipeline configuration |

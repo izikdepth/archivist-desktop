@@ -1,0 +1,152 @@
+/* NextSteps panel styles */
+.next-steps-panel {
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
+  border: 1px solid var(--color-border);
+}
+
+.next-steps-panel h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-bottom: var(--spacing-xs);
+  color: var(--color-text);
+}
+
+.next-steps-intro {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  margin-bottom: var(--spacing-lg);
+}
+
+.next-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+/* Individual step card - Terminal aesthetic */
+.next-step-card {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background-color: var(--term-panel);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--term-border);
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+.next-step-card:hover {
+  border-color: var(--phosphor);
+  box-shadow: 0 0 15px var(--phosphor-glow);
+}
+
+.next-step-card.completed {
+  opacity: 0.7;
+  border-color: var(--ui-green);
+}
+
+.next-step-card.completed:hover {
+  border-color: var(--phosphor);
+}
+
+.next-step-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+}
+
+.next-step-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.next-step-title {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--color-text);
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.next-step-title .check-mark {
+  color: var(--phosphor);
+  font-weight: 600;
+  text-shadow: 0 0 6px var(--phosphor-glow);
+}
+
+.next-step-description {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.next-step-action {
+  flex-shrink: 0;
+}
+
+.btn-next-step {
+  display: inline-block;
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  background-color: transparent;
+  color: var(--ui-green);
+  border: 1px solid var(--ui-green);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+.btn-next-step:hover {
+  background-color: transparent;
+  color: var(--phosphor);
+  border-color: var(--phosphor);
+  box-shadow: 0 0 10px var(--phosphor-glow);
+}
+
+.btn-next-step.secondary {
+  background-color: transparent;
+  color: var(--term-text);
+  border: 1px solid var(--term-border);
+}
+
+.btn-next-step.secondary:hover {
+  color: var(--term-text-bright);
+  border-color: var(--ui-green);
+}
+
+.next-step-card.completed .btn-next-step {
+  display: none;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .next-step-card {
+    flex-direction: column;
+    text-align: center;
+    gap: var(--spacing-sm);
+  }
+
+  .next-step-action {
+    width: 100%;
+  }
+
+  .btn-next-step {
+    display: block;
+    width: 100%;
+    text-align: center;
+  }
+}
