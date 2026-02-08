@@ -79,6 +79,7 @@ pub fn run() {
             commands::upload_file,
             commands::download_file,
             commands::delete_file,
+            commands::delete_all_files,
             commands::pin_file,
             commands::get_file,
             commands::check_node_connection,

@@ -1,7 +1,15 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { validateCid, type CidValidationResult } from '../lib/cidValidation';
+
+interface UploadProgressEvent {
+  filename: string;
+  bytesSent: number;
+  totalBytes: number;
+  percent: number;
+}
 
 interface FileInfo {
   cid: string;
@@ -37,6 +45,7 @@ function Files() {
   const [cidValidation, setCidValidation] = useState<CidValidationResult | null>(null);
   const [autoDownloadPending, setAutoDownloadPending] = useState(false);
   const autoDownloadTimerRef = useRef<number | null>(null);
+  const [uploadProgressData, setUploadProgressData] = useState<UploadProgressEvent | null>(null);
 
   const checkNodeConnection = useCallback(async () => {
     try {
@@ -74,6 +83,16 @@ function Files() {
     return () => clearInterval(interval);
   }, [checkNodeConnection, loadFiles]);
 
+  // Listen for upload progress events
+  useEffect(() => {
+    const unlisten = listen<UploadProgressEvent>('upload-progress', (event) => {
+      setUploadProgressData(event.payload);
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
   // Cleanup auto-download timer on unmount
   useEffect(() => {
     return () => {
@@ -109,11 +128,13 @@ function Files() {
       }
 
       setUploadProgress(null);
+      setUploadProgressData(null);
       await loadFiles();
     } catch (e) {
       const msg = typeof e === 'string' ? e : (e instanceof Error ? e.message : 'Failed to upload file');
       setError(msg);
       setUploadProgress(null);
+      setUploadProgressData(null);
     }
   };
 
@@ -259,6 +280,23 @@ function Files() {
     }
   }, []);
 
+  const handleDeleteAll = async () => {
+    if (!confirm(`Delete all ${files.length} files? This cannot be undone.`)) return;
+
+    try {
+      setError(null);
+      setLoading(true);
+      const count = await invoke<number>('delete_all_files');
+      console.log(`Deleted ${count} files`);
+      await loadFiles();
+    } catch (e) {
+      const msg = typeof e === 'string' ? e : (e instanceof Error ? e.message : 'Failed to delete files');
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDelete = async (cid: string) => {
     if (!confirm('Remove this file from your local cache?')) return;
 
@@ -324,6 +362,14 @@ function Files() {
 
       {error && <div className="error-banner">{error}</div>}
       {uploadProgress && <div className="info-banner">{uploadProgress}</div>}
+      {uploadProgressData && (
+        <div className="info-banner">
+          <div>Uploading {uploadProgressData.filename}: {uploadProgressData.percent}% ({formatBytes(uploadProgressData.bytesSent)} / {formatBytes(uploadProgressData.totalBytes)})</div>
+          <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--color-bg-tertiary, #333)', borderRadius: '3px', marginTop: '6px' }}>
+            <div style={{ width: `${uploadProgressData.percent}%`, height: '100%', backgroundColor: 'var(--color-accent, #0f0)', borderRadius: '3px', transition: 'width 0.2s' }} />
+          </div>
+        </div>
+      )}
 
       {/* Download by CID section */}
       <div className="download-by-cid">
@@ -359,6 +405,15 @@ function Files() {
       <div className="file-stats">
         <span>{files.length} files</span>
         <span>{formatBytes(totalSize)} total</span>
+        {files.length > 0 && (
+          <button
+            className="small danger"
+            onClick={handleDeleteAll}
+            disabled={loading || !nodeConnected}
+          >
+            Delete All
+          </button>
+        )}
       </div>
 
       <div className="files-table">

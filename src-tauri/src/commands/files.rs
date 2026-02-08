@@ -10,11 +10,15 @@ pub async fn list_files(state: State<'_, AppState>) -> Result<FileList> {
     files.list_files().await
 }
 
-/// Upload a file to the node
+/// Upload a file to the node (streams file to avoid buffering in RAM)
 #[tauri::command]
-pub async fn upload_file(state: State<'_, AppState>, path: String) -> Result<UploadResult> {
+pub async fn upload_file(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<UploadResult> {
     let mut files = state.files.write().await;
-    files.upload_file(&path).await
+    files.upload_file_with_progress(&path, Some(&app_handle)).await
 }
 
 /// Download a file by CID to a destination path
@@ -39,6 +43,13 @@ pub async fn download_file(
 pub async fn delete_file(state: State<'_, AppState>, cid: String) -> Result<()> {
     let mut files = state.files.write().await;
     files.delete_file(&cid).await
+}
+
+/// Delete all files from the node
+#[tauri::command]
+pub async fn delete_all_files(state: State<'_, AppState>) -> Result<u64> {
+    let mut files = state.files.write().await;
+    files.delete_all_files().await
 }
 
 /// Pin or unpin a file

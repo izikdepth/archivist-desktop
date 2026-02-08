@@ -1253,6 +1253,34 @@ function Settings() {
         </div>
       )}
 
+      {/* Storage */}
+      <div className="settings-section">
+        <h3>Storage</h3>
+        <div className="setting-item">
+          <label>Clear All Node Data</label>
+          <p className="hint" style={{ marginBottom: '8px' }}>
+            Removes all files from the archivist-node. This cannot be undone.
+          </p>
+          <button
+            className="danger"
+            onClick={async () => {
+              if (!confirm('Delete all files from storage? This cannot be undone.')) return;
+              try {
+                setError(null);
+                const count = await invoke<number>('delete_all_files');
+                setSuccess(true);
+                setTimeout(() => setSuccess(false), 3000);
+                console.log(`Cleared ${count} files from storage`);
+              } catch (e) {
+                setError(e instanceof Error ? e.message : 'Failed to clear storage');
+              }
+            }}
+          >
+            Clear Storage
+          </button>
+        </div>
+      </div>
+
       {/* Developer / Debug Settings */}
       <div className="settings-section">
         <h3>Developer</h3>
