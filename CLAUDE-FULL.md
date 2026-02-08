@@ -744,7 +744,7 @@ git tag v0.2.0
 git push origin main --tags
 
 # 4. Watch the release workflow build
-# Go to: https://github.com/basedmint/archivist-desktop/actions
+# Go to: https://github.com/durability-labs/archivist-desktop/actions
 ```
 
 ### Manual Release Build (Testing)
@@ -3450,7 +3450,7 @@ All errors serialize to JSON for frontend consumption.
 
 ## Resources
 
-- **GitHub Repository**: https://github.com/basedmint/archivist-desktop
+- **GitHub Repository**: https://github.com/durability-labs/archivist-desktop
 - **Sidecar Repository**: https://github.com/durability-labs/archivist-node
 - **Tauri Documentation**: https://tauri.app
 - **libp2p Documentation**: https://docs.libp2p.io

@@ -58,7 +58,7 @@ pub fn run() {
             .plugin(tauri_plugin_updater::Builder::new().build());
     }
 
-    builder
+    let app = builder
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             // Feature detection
@@ -236,8 +236,24 @@ pub fn run() {
                 log::info!("Window hidden to tray");
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Archivist");
+        .build(tauri::generate_context!())
+        .expect("error building Archivist");
+
+    app.run(|app_handle, event| {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        if let tauri::RunEvent::Exit = event {
+            log::info!("Application exiting, cleaning up sidecar...");
+            let state = app_handle.state::<AppState>();
+            let node = state.node.clone();
+            tauri::async_runtime::block_on(async {
+                let mut node = node.write().await;
+                if let Err(e) = node.stop().await {
+                    log::warn!("Sidecar cleanup on exit: {}", e);
+                }
+            });
+            log::info!("Sidecar cleanup complete");
+        }
+    });
 }
 
 /// Set up the system tray icon and menu
@@ -260,6 +276,14 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
             }
             "quit" => {
                 log::info!("Quit requested from tray");
+                let state = app.state::<AppState>();
+                let node = state.node.clone();
+                tauri::async_runtime::block_on(async {
+                    let mut node = node.write().await;
+                    if let Err(e) = node.stop().await {
+                        log::warn!("Sidecar cleanup on quit: {}", e);
+                    }
+                });
                 app.exit(0);
             }
             _ => {}

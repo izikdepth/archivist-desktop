@@ -2,9 +2,9 @@
 name = "archivist-desktop"
 version = "0.1.0"
 description = "Archivist - Decentralized File Storage Desktop Client"
-authors = ["BasedMint"]
+authors = ["Durability Labs"]
 license = "MIT"
-repository = "https://github.com/basedmint/archivist-desktop"
+repository = "https://github.com/durability-labs/archivist-desktop"
 edition = "2021"
 rust-version = "1.77.2"
 

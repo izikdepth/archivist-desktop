@@ -1320,12 +1320,12 @@ function Settings() {
           <div className="about-row">
             <span className="about-label">Website</span>
             <a
-              href="https://github.com/basedmint/archivist"
+              href="https://archivist.storage"
               target="_blank"
               rel="noopener noreferrer"
               className="about-link"
             >
-              github.com/basedmint/archivist
+              archivist.storage
             </a>
           </div>
         </div>
