@@ -4,12 +4,14 @@
 //! a typed interface to the node's REST API.
 
 use crate::error::{ArchivistError, Result};
+use futures::StreamExt;
 use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::Duration;
 use tokio::fs::File;
-use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
+use tokio_util::io::ReaderStream;
 
 /// Response from /api/archivist/v1/debug/info
 /// Matches archivist-node v0.2.0 API format
@@ -202,23 +204,34 @@ impl NodeApiClient {
         Ok(None)
     }
 
-    /// Upload a file to the node
+    /// Upload a file to the node using streaming (constant memory usage).
     ///
     /// The archivist-node API expects raw binary data with:
     /// - Content-Type header set to the file's MIME type
     /// - Content-Disposition header with the filename
     pub async fn upload_file(&self, file_path: &Path) -> Result<UploadResponse> {
+        self.upload_file_with_progress(file_path, None).await
+    }
+
+    /// Upload a file to the node with optional progress reporting via Tauri events.
+    ///
+    /// Streams the file to avoid buffering the entire file in RAM.
+    /// If `app_handle` is provided, emits `upload-progress` events.
+    pub async fn upload_file_with_progress(
+        &self,
+        file_path: &Path,
+        app_handle: Option<&tauri::AppHandle>,
+    ) -> Result<UploadResponse> {
         let url = format!("{}/api/archivist/v1/data", self.base_url);
 
-        // Read file contents
-        let mut file = File::open(file_path).await.map_err(|e| {
+        let file = File::open(file_path).await.map_err(|e| {
             ArchivistError::FileOperationFailed(format!("Failed to open file: {}", e))
         })?;
 
-        let mut contents = Vec::new();
-        file.read_to_end(&mut contents).await.map_err(|e| {
-            ArchivistError::FileOperationFailed(format!("Failed to read file: {}", e))
+        let file_meta = file.metadata().await.map_err(|e| {
+            ArchivistError::FileOperationFailed(format!("Failed to read file metadata: {}", e))
         })?;
+        let file_size = file_meta.len();
 
         let filename = file_path
             .file_name()
@@ -234,13 +247,64 @@ impl NodeApiClient {
         // Build Content-Disposition header for filename
         let content_disposition = format!("attachment; filename=\"{}\"", filename);
 
+        // Stream the file instead of reading it all into memory
+        let reader_stream = ReaderStream::new(file);
+
+        // Wrap with progress tracking if app_handle is provided
+        let body = if let Some(handle) = app_handle {
+            use tauri::Emitter;
+            let handle = handle.clone();
+            let fname = filename.clone();
+            let total = file_size;
+            let bytes_sent = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+            let last_reported = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+
+            let progress_stream = reader_stream.map(move |chunk| {
+                if let Ok(ref data) = chunk {
+                    let sent = bytes_sent
+                        .fetch_add(data.len() as u64, std::sync::atomic::Ordering::Relaxed)
+                        + data.len() as u64;
+                    let percent = if total > 0 {
+                        (sent as f64 / total as f64 * 100.0) as u64
+                    } else {
+                        0
+                    };
+
+                    // Report every 1% or every 1MB, whichever is less frequent
+                    let last = last_reported.load(std::sync::atomic::Ordering::Relaxed);
+                    let mb_threshold = 1_048_576u64; // 1MB
+                    if percent > last || sent.saturating_sub(last * total / 100) > mb_threshold {
+                        last_reported.store(percent, std::sync::atomic::Ordering::Relaxed);
+                        let _ = handle.emit(
+                            "upload-progress",
+                            serde_json::json!({
+                                "filename": fname,
+                                "bytesSent": sent,
+                                "totalBytes": total,
+                                "percent": percent
+                            }),
+                        );
+                    }
+                }
+                chunk
+            });
+
+            reqwest::Body::wrap_stream(progress_stream)
+        } else {
+            reqwest::Body::wrap_stream(reader_stream)
+        };
+
+        // Dynamic timeout: at least 300s, or file_size / 10MB/s
+        let timeout_secs = std::cmp::max(300, file_size / (10 * 1024 * 1024));
+
         let response = self
             .client
             .post(&url)
             .header(header::CONTENT_TYPE, &mime_type)
             .header(header::CONTENT_DISPOSITION, &content_disposition)
-            .body(contents)
-            .timeout(Duration::from_secs(300)) // 5 min timeout for large files
+            .header(header::CONTENT_LENGTH, file_size)
+            .body(body)
+            .timeout(Duration::from_secs(timeout_secs))
             .send()
             .await
             .map_err(|e| ArchivistError::ApiError(format!("Upload failed: {}", e)))?;
@@ -264,7 +328,8 @@ impl NodeApiClient {
         })
     }
 
-    /// Download a file by CID (from local storage)
+    /// Download a file by CID into memory (from local storage).
+    /// Use `download_file_to_path` for large files to avoid memory issues.
     pub async fn download_file(&self, cid: &str) -> Result<Vec<u8>> {
         let url = format!("{}/api/archivist/v1/data/{}", self.base_url, cid);
 
@@ -290,17 +355,53 @@ impl NodeApiClient {
             .map_err(|e| ArchivistError::ApiError(format!("Failed to read download: {}", e)))
     }
 
-    /// Download a file by CID from the network (if not available locally)
-    ///
-    /// This uses POST to request the network download, which fetches the file
-    /// from connected peers and stores it locally. Then we download from local.
-    pub async fn download_file_network(&self, cid: &str) -> Result<Vec<u8>> {
-        // First, request the file from the network (POST triggers async download)
-        let request_url = format!("{}/api/archivist/v1/data/{}/network", self.base_url, cid);
+    /// Download a file by CID directly to a file path using streaming (constant memory).
+    pub async fn download_file_to_path(&self, cid: &str, dest: &Path) -> Result<()> {
+        let url = format!("{}/api/archivist/v1/data/{}", self.base_url, cid);
 
         let response = self
             .client
-            .post(&request_url)
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| ArchivistError::ApiError(format!("Download failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            return Err(ArchivistError::ApiError(format!(
+                "Download failed: HTTP {}",
+                response.status()
+            )));
+        }
+
+        let mut file = File::create(dest).await.map_err(|e| {
+            ArchivistError::FileOperationFailed(format!("Failed to create file: {}", e))
+        })?;
+
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let data = chunk.map_err(|e| {
+                ArchivistError::ApiError(format!("Failed to read download stream: {}", e))
+            })?;
+            file.write_all(&data).await.map_err(|e| {
+                ArchivistError::FileOperationFailed(format!("Failed to write to file: {}", e))
+            })?;
+        }
+
+        file.flush().await.map_err(|e| {
+            ArchivistError::FileOperationFailed(format!("Failed to flush file: {}", e))
+        })?;
+
+        Ok(())
+    }
+
+    /// Trigger the sidecar to fetch a CID from the P2P network.
+    /// Does NOT download the file content — just tells the sidecar to store it locally.
+    pub async fn request_network_download(&self, cid: &str) -> Result<()> {
+        let url = format!("{}/api/archivist/v1/data/{}/network", self.base_url, cid);
+
+        let response = self
+            .client
+            .post(&url)
             .timeout(Duration::from_secs(600)) // 10 min for network downloads
             .send()
             .await
@@ -317,8 +418,7 @@ impl NodeApiClient {
             )));
         }
 
-        // Now download from local storage (the POST should have fetched it)
-        self.download_file(cid).await
+        Ok(())
     }
 
     /// Get the Signed Peer Record for this node

@@ -477,7 +477,8 @@ impl BackupDaemon {
                     "Manifest {} not in local storage, fetching from network",
                     manifest_cid
                 );
-                self.api_client.download_file_network(manifest_cid).await?
+                self.api_client.request_network_download(manifest_cid).await?;
+                self.api_client.download_file(manifest_cid).await?
             }
         };
 
@@ -607,8 +608,8 @@ impl BackupDaemon {
                 let path = file.path.clone();
 
                 let task = tokio::spawn(async move {
-                    match api_client.download_file_network(&cid).await {
-                        Ok(_) => {
+                    match api_client.request_network_download(&cid).await {
+                        Ok(()) => {
                             log::info!("Downloaded: {} ({})", path, cid);
                             Ok(())
                         }

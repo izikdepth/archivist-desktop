@@ -189,7 +189,17 @@ impl FileService {
     }
 
     /// Upload a file to the node
+    #[allow(dead_code)]
     pub async fn upload_file(&mut self, path: &str) -> Result<UploadResult> {
+        self.upload_file_with_progress(path, None).await
+    }
+
+    /// Upload a file to the node with optional progress reporting
+    pub async fn upload_file_with_progress(
+        &mut self,
+        path: &str,
+        app_handle: Option<&tauri::AppHandle>,
+    ) -> Result<UploadResult> {
         // Validate and sanitize the path first
         let path = Self::validate_path(path)?;
 
@@ -217,8 +227,11 @@ impl FileService {
 
         log::info!("Uploading file: {} ({} bytes)", filename, metadata.len());
 
-        // Upload to node
-        let response = self.api_client.upload_file(&path).await?;
+        // Upload to node with streaming
+        let response = self
+            .api_client
+            .upload_file_with_progress(&path, app_handle)
+            .await?;
 
         // Store in local cache
         let file_info = FileInfo {
@@ -324,21 +337,25 @@ impl FileService {
 
         log::info!("Downloading file {} to {}", cid, destination);
 
-        // Try local first, then network
-        let data = match self.api_client.download_file(cid).await {
-            Ok(data) => data,
+        // Try streaming download (local first, then network fallback)
+        let dest = std::path::Path::new(destination);
+        match self.api_client.download_file_to_path(cid, dest).await {
+            Ok(()) => {
+                log::info!("Downloaded file {} to {}", cid, destination);
+            }
             Err(_) => {
                 log::info!("File not found locally, fetching from network...");
-                self.api_client.download_file_network(cid).await?
+                // Network download: trigger fetch via POST then stream from local to file
+                self.api_client.request_network_download(cid).await?;
+                self.api_client.download_file_to_path(cid, dest).await?;
+                log::info!(
+                    "Downloaded file {} from network to {}",
+                    cid,
+                    destination
+                );
             }
-        };
+        }
 
-        // Write to destination
-        tokio::fs::write(destination, &data).await.map_err(|e| {
-            ArchivistError::FileOperationFailed(format!("Failed to write file: {}", e))
-        })?;
-
-        log::info!("Downloaded {} bytes to {}", data.len(), destination);
         Ok(())
     }
 
@@ -360,6 +377,23 @@ impl FileService {
             );
             Ok(())
         }
+    }
+
+    /// Delete all files from node storage and local cache
+    pub async fn delete_all_files(&mut self) -> Result<u64> {
+        let data_list = self.api_client.list_data().await?;
+        let total = data_list.content.len() as u64;
+
+        for item in &data_list.content {
+            if let Err(e) = self.api_client.delete_file(&item.cid).await {
+                log::warn!("Failed to delete {}: {}", item.cid, e);
+            }
+        }
+
+        self.files.clear();
+        log::info!("Deleted all files ({} total)", total);
+
+        Ok(total)
     }
 
     /// Pin/unpin a file (marks as protected in local cache)
