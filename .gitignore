@@ -43,6 +43,10 @@ src-tauri/.cargo/
 # pnpm-lock.yaml
 # Cargo.lock
 
+# Test artifacts
+e2e/playwright-report/
+e2e/test-results/
+
 # Redundant documentation (consolidated into CLAUDE.md)
 ARCHIVIST-NODE-API.md
 P2P-TESTING-GUIDE.md
